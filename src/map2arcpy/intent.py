@@ -34,6 +34,11 @@ def apply_intent(spec: MapSpec, text: str) -> MapSpec:
     instr = nl.parse(text, name_hint=spec.layout.title)
     applied: List[str] = []
 
+    # the ORIGINAL uploaded data layer is the operation subject — capture it
+    # before instruction-mentioned files are added, so "clip to city_boundary"
+    # targets the uploaded data, not the boundary named in the text
+    data_layers = [l for l in spec.layers if l.kind != "basemap" and l.source]
+
     # ---- extra data files mentioned in the instruction become layers ------
     existing = {l.name.lower() for l in spec.layers}
     for il in instr.layers:
@@ -44,7 +49,7 @@ def apply_intent(spec: MapSpec, text: str) -> MapSpec:
             existing.add(il.name.lower())
             applied.append(f"added layer '{il.name}' from the instruction")
 
-    target = _find_target(spec, low)
+    target = data_layers[0] if data_layers else _find_target(spec, low)
 
     # ---- CRS: only when the text names one explicitly ---------------------
     if not any("no CRS given" in n for n in instr.notes):
@@ -58,10 +63,25 @@ def apply_intent(spec: MapSpec, text: str) -> MapSpec:
         op.inputs = [_resolve(i, name_map, instr_outputs, target) for i in op.inputs]
         # "buffer WARDS by 1 km" — the word after the verb names the subject;
         # it beats whatever path the grammar grabbed first
-        if op.tool in ("buffer", "dissolve", "select"):
-            subj = _subject_after_verb(op.tool, low, name_map)
-            if subj and op.inputs and op.inputs[0] not in instr_outputs:
-                op.inputs[0] = subj
+        if op.tool in ("buffer", "dissolve", "select") and op.inputs \
+                and op.inputs[0] not in instr_outputs:
+            word = _subject_word(op.tool, low)
+            if word and word not in _STOPWORDS:
+                hit = _subject_after_verb(op.tool, low, name_map)
+                if hit:
+                    op.inputs[0] = hit                 # names a real layer
+                elif word != (target.name.lower() if target else ""):
+                    # names a layer that wasn't uploaded -> keep it unresolved
+                    # (surfaces in validation) instead of silently using target
+                    op.inputs[0] = word
+        # a leading "clip/erase to X" (no subject) parsed as clipping X by
+        # itself — the subject is the uploaded data layer; fix the first input
+        if op.tool in ("clip", "erase") and op.inputs and target is not None:
+            if len(op.inputs) >= 2 and op.inputs[0] == op.inputs[1]:
+                op.inputs[0] = target.name
+            elif op.inputs[0] not in name_map.values() and \
+                    op.inputs[0] not in instr_outputs:
+                op.inputs.insert(0, target.name)
         spec.operations.append(op)
         applied.append(f"op:{op.tool}")
     declared = {l.name for l in spec.layers}
@@ -169,14 +189,31 @@ def _resolve(inp: str, name_map, instr_outputs, target: Optional[Layer]) -> str:
         return fuzzy
     if any(c in inp for c in "/\\."):              # a literal path
         return inp
-    return target.name if target is not None else inp
+    # nl.parse's own placeholders (no real layer named in the text) mean "the
+    # data" -> resolve to the target data layer
+    if il == "input" or re.fullmatch(r"layer_\d+", il):
+        return target.name if target is not None else inp
+    # a genuinely unknown NAMED token (e.g. 'rivers' never uploaded): keep it
+    # so the spec-validator surfaces it, rather than silently running the op on
+    # the wrong data
+    return inp
+
+
+_STOPWORDS = {"by", "the", "to", "from", "with", "of", "and", "a", "an",
+              "using", "in", "on", "it", "them", "this", "that", "where",
+              "into", "over", "for", "at", "as"}
+
+
+def _subject_word(tool: str, low: str) -> Optional[str]:
+    """The raw word after the verb (e.g. 'rivers' in 'buffer rivers by 1km')."""
+    m = re.search(r"\b%s\w*\s+(?:the\s+)?([a-z_][\w]*)" % re.escape(tool), low)
+    return m.group(1) if m else None
 
 
 def _subject_after_verb(tool: str, low: str, name_map) -> Optional[str]:
-    m = re.search(r"\b%s\w*\s+(?:the\s+)?([a-z_][\w]*)" % re.escape(tool), low)
-    if not m:
+    word = _subject_word(tool, low)
+    if not word or word in _STOPWORDS:
         return None
-    word = m.group(1)
     if word in name_map:
         return name_map[word]
     return next((v for k, v in name_map.items()

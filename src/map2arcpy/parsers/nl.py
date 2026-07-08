@@ -208,9 +208,12 @@ def _crs(low: str) -> Tuple[int, Optional[str]]:
     if m:
         zone, hemi = int(m.group(1)), m.group(2).lower()
         return (32600 + zone if hemi == "n" else 32700 + zone), None
-    if "web mercator" in low or "3857" in low:
+    # phrase forms only — a bare "3857"/"4326" inside a where-clause or an
+    # attribute value must NOT hijack the CRS (numeric codes go through
+    # _EPSG_RE, which requires an 'epsg'/'srid' prefix)
+    if "web mercator" in low or re.search(r"\bepsg[:\s]*3857\b", low):
         return 3857, None
-    if "wgs84" in low or "wgs 84" in low:
+    if "wgs84" in low or "wgs 84" in low or "wgs 1984" in low:
         return 4326, None
     return 4326, ("no CRS given — defaulting to EPSG:4326; set 'epsg' in CONFIG "
                   "to your projected CRS for correct buffers/areas")

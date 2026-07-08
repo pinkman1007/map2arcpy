@@ -43,7 +43,11 @@ ARCHETYPES: List[Dict[str, Any]] = [
      "ops": "esz",
      "note": "eco-sensitive-zone convention: graded buffer rings at 1/5/10 km "
              "around the protected features (edit 'distances' in the script), "
-             "red = most sensitive"},
+             "red = most sensitive. LEGAL CAVEAT: these fixed rings are a "
+             "starting scaffold, NOT a legal rule — the Supreme Court (WP(C) "
+             "202/1995, 26-Apr-2023) struck down the uniform 1 km ESZ; the "
+             "site-specific MoEFCC gazette notification prevails. Verify against "
+             "it. The buffer must run in a PROJECTED CRS (metres), not degrees."},
     {"name": "LULC / land use",
      "trigger": r"\blulc\b|\bland\s*(?:use|cover)\b",
      "renderer": "unique",
@@ -152,9 +156,17 @@ def apply(spec: MapSpec, text: str) -> MapSpec:
             if rings_lyr is None:
                 spec.layers.append(Layer(name=out, source="", kind="vector",
                                          renderer=renderer))
-            else:
+                touched.append(out)
+            elif not user_named_ramp:          # gaps-only: don't override "using X"
                 rings_lyr.renderer = renderer
-            touched.append(out)
+                touched.append(out)
+        # projected-CRS gate — a distance buffer on EPSG:4326 (degrees) is
+        # wrong-by-design; warn when the CRS looks geographic
+        if spec.crs_epsg in (4326, 4269) or 4000 <= spec.crs_epsg < 5000:
+            spec.notes.append("eco-sensitive zones: the ring buffers need a "
+                              f"PROJECTED CRS in metres, but CONFIG epsg is "
+                              f"{spec.crs_epsg} (geographic) — set a projected "
+                              "EPSG (e.g. a UTM zone) or the km distances are wrong")
 
     spec.notes.append(f"archetype '{arch['name']}' applied"
                       + (f" to {', '.join(dict.fromkeys(touched))}" if touched else "")

@@ -304,11 +304,15 @@ def classify_pair(series_a: Sequence[float], series_b: Sequence[float],
     def _share(u, v):
         return u / (u + v) if (u + v) else 0.5
     share0, share1 = _share(a[0], b[0]), _share(a[-1], b[-1])
-    share_moved = abs(share1 - share0)
+    # success-to-successful = DIVERGENCE from parity (a lead that compounds),
+    # not mere movement. Two actors CONVERGING (gap closing toward 0.5) must
+    # NOT be labelled winner-take-all.
+    diverged_from_parity = abs(share1 - 0.5) - abs(share0 - 0.5)
 
-    if share_moved > 0.1:
+    if diverged_from_parity > 0.1:
         arche = "success to the successful"
-        behaviour = f"{labels[0]}'s share moved {share0:.2f} -> {share1:.2f}"
+        behaviour = (f"share diverged from parity "
+                     f"({share0:.2f} -> {share1:.2f}); one actor pulling ahead")
         struct = ("two reinforcing loops competing for a limited resource; an "
                   "early lead compounds into winner-take-all")
     elif both_up and both_accel:

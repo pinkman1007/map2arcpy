@@ -151,7 +151,7 @@ def apply(spec: MapSpec, depict_text: str = "") -> MapSpec:
     if drivers:
         have, miss = [], []
         for d in drivers:
-            present = any(k in layer_blob for k in d["kw"])
+            present = any(_kw_hit(k, layer_blob) for k in d["kw"])
             tag = f"{d['driver']} ({d['sign']})"
             (have if present else miss).append(tag)
         lines.append("Drivers in this system: "
@@ -182,7 +182,7 @@ def apply(spec: MapSpec, depict_text: str = "") -> MapSpec:
     # --- boundary critique --------------------------------------------------
     if name in _FLOW_THEMES:
         clipped_admin = any(o.tool == "clip" for o in spec.operations) and \
-            any(k in layer_blob for k in _ADMIN_KW)
+            any(_kw_hit(k, layer_blob) for k in _ADMIN_KW)
         nat = ("watershed/catchment" if name in ("flood / inundation",
                "rainfall / precipitation") else "airshed/functional region")
         if clipped_admin:
@@ -231,6 +231,13 @@ def _detect_years(spec: MapSpec) -> List[int]:
 
 
 # ---------------------------------------------------------------------------
+def _kw_hit(kw: str, blob: str) -> bool:
+    """Keyword match with a LEADING boundary so a stem doesn't match inside a
+    bigger word: 'rain' hits 'rainfall'/'rain_2015' but NOT 'terrain' or
+    'drainage'; 'road' hits 'roads' but not 'railroad'."""
+    return re.search(r"(?<![a-z0-9])" + re.escape(kw), blob) is not None
+
+
 def _layer_blob(spec: MapSpec) -> str:
     parts = [l.name for l in spec.layers] + \
             [str(l.source) for l in spec.layers] + \
@@ -245,13 +252,26 @@ def _is_signed_flow(name: str, text: str) -> bool:
     return bool(re.search(r"\b(change|difference|loss|gain|net|delta|trend)\b", low))
 
 
+def _luminance(hexc: str):
+    h = hexc.lstrip("#")
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return 0.299 * r + 0.587 * g + 0.114 * b
+    except (ValueError, IndexError):
+        return None
+
+
 def _looks_diverging(ramp: List[str]) -> bool:
-    """A diverging ramp has a light/neutral middle between two dark ends."""
+    """A diverging ramp's LIGHTEST colour sits in the interior (a light/neutral
+    pivot between two darker ends). This is robust to even-length ramps and to
+    pale — not just white — centres, unlike a fixed mid-index + >200 test that
+    wrongly rejected spectral / red_yellow_green / sensitivity."""
     if not ramp or len(ramp) < 3:
         return False
-    mid = ramp[len(ramp) // 2].lstrip("#")
-    try:
-        r, g, b = int(mid[0:2], 16), int(mid[2:4], 16), int(mid[4:6], 16)
-        return min(r, g, b) > 200          # near-white/neutral centre
-    except (ValueError, IndexError):
+    lums = [_luminance(c) for c in ramp]
+    if any(v is None for v in lums):
         return False
+    light_i = max(range(len(lums)), key=lambda i: lums[i])
+    interior = 0 < light_i < len(lums) - 1
+    ends_darker = lums[light_i] - min(lums[0], lums[-1]) > 25
+    return interior and ends_darker

@@ -5,14 +5,17 @@ anything about live behaviour. Items marked **fixed** were found by the gap
 audit and closed; everything else is open and documented deliberately —
 silence would read as coverage.
 
-## 1. The big one: no arcpy has ever run here
+## 1. The big one: arcpy runs almost never happen here
 
-The generator, parsers, and 40-test suite are pure Python; the generated
-scripts' arcpy calls are emitted from templates and syntax-checked, but no
-geoprocessing has executed against real data. **The first run inside
-ArcGIS Pro is a shakedown.** The scripts' QA gates (consolidated input
-audit, CRS lock, export verification) exist precisely so that first run
-fails loudly, not silently.
+The generator, parsers, and 170-test suite are pure Python; the generated
+scripts' arcpy calls are emitted from templates and syntax-checked, but the
+runtime has been executed against real arcpy only ONCE (a rainfall dataset).
+**Each new run inside ArcGIS Pro is a shakedown.** The scripts' QA gates
+(consolidated input audit, CRS lock, CRS-define, export verification, and a
+render report) exist precisely so those runs fail loudly, not silently.
+A standing gap: no mock-arcpy harness executes the runtime in CI, so
+emit↔runtime signature agreement is only checked by string presence, not by
+running the generated script.
 
 Practical consequences to expect on shakedown:
 
@@ -20,9 +23,12 @@ Practical consequences to expect on shakedown:
   slightly differently across Pro 3.0–3.4 (e.g. `breakCount` before vs after
   colour assignment). The helpers catch exceptions and log a WARN rather than
   crash — the map still exports, possibly with default symbology.
-* `apply_stretch` is a stub: continuous rasters keep Pro's default stretch;
-  the intended ramp is only logged. Classified raster symbology from CIM
-  colorizers is not carried over (see §3).
+* ~~`apply_stretch` is a stub~~ — **fixed v0.17.0**: rasters now get a real
+  colour ramp via the stretch colorizer (`colorizer.colorRamp` from
+  `aprx.listColorRamps`), matched by name from `RAMP_PRO_NAMES`. Still open:
+  if a map2arcpy ramp name doesn't match any Pro built-in ramp on the
+  machine, it falls back to default stretch (the render report says so).
+  Classified raster symbology from CIM colorizers is still not carried over.
 * `aprx.createLayout` / `createMapFrame` / `createMapSurroundElement` need
   ArcGIS Pro **3.x**; on 2.x the layout section will fail. There is no
   version probe in the generated script.

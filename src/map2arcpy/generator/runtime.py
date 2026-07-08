@@ -477,19 +477,29 @@ def add_csv_xy(m, results, src, name, x_field, y_field, epsg=4326):
 
 
 def add_kml(m, work_dir, src, name):
-    """KML/KMZ -> KMLToLayer -> add every Placemark feature class found."""
+    """KML/KMZ -> KMLToLayer -> add every feature class it produced. KMLToLayer
+    writes classes (Points/Polylines/Polygons) inside a 'Placemarks' feature
+    dataset in <name>.gdb, and the exact names vary by Pro version — so we WALK
+    the output gdb for feature classes rather than guessing names."""
     try:
         arcpy.conversion.KMLToLayer(src, work_dir, name)
         gdb = os.path.join(work_dir, name + ".gdb")
         added = None
-        for fc in ("Placemarks_Point", "Placemarks_Polyline", "Placemarks_Polygon",
-                   "Points", "Polylines", "Polygons"):
-            p = os.path.join(gdb, fc)
-            if arcpy.Exists(p):
-                added = m.addDataFromPath(p)
-                log("KML class added: %s" % fc)
+        try:
+            for dirpath, _dirs, fcs in arcpy.da.Walk(gdb, datatype="FeatureClass"):
+                for fc in fcs:
+                    added = m.addDataFromPath(os.path.join(dirpath, fc))
+                    log("KML class added: %s" % fc)
+        except Exception:
+            # fallback: probe common names if Walk is unavailable
+            for sub in ("Placemarks/Points", "Placemarks/Polylines",
+                        "Placemarks/Polygons", "Points", "Polylines", "Polygons"):
+                p = os.path.join(gdb, *sub.split("/"))
+                if arcpy.Exists(p):
+                    added = m.addDataFromPath(p)
+                    log("KML class added: %s" % sub)
         if added is None:
-            log("KML converted but no Placemark classes found in %s" % gdb, "WARN")
+            log("KML converted but no feature classes found in %s" % gdb, "WARN")
         return added
     except Exception as e:
         log("KML layer '%s' skipped: %s" % (name, e), "WARN")
@@ -594,14 +604,22 @@ def classify_series(x):
 
 
 def raster_series_means(pairs):
-    """pairs: [(year, raster_source), ...] -> [(year, mean_over_raster), ...]."""
+    """pairs: [(year, raster_source), ...] -> [(year, mean_over_raster), ...].
+    Builds statistics first (a freshly-created raster may have none) so
+    GetRasterProperties MEAN doesn't fail; NetCDF/opaque sources that can't be
+    read as a single-band raster degrade to a WARN and are skipped."""
     out = []
     for yr, src in pairs:
         try:
+            try:
+                arcpy.management.CalculateStatistics(src)
+            except Exception:
+                pass
             m = float(arcpy.management.GetRasterProperties(src, "MEAN").getOutput(0))
             out.append((yr, m))
         except Exception as e:
-            log("systems: mean of %s failed: %s" % (src, e), "WARN")
+            log("systems: mean of %s failed (%s) — if this is NetCDF, make a "
+                "raster layer first" % (src, e), "WARN")
     return out
 
 
@@ -676,8 +694,11 @@ def export_layout(layout, out_path, dpi=300):
     d = os.path.dirname(out_path)
     if d:
         os.makedirs(d, exist_ok=True)
-    if out_path.lower().endswith(".pdf"):
+    ext = os.path.splitext(out_path)[1].lower()
+    if ext == ".pdf":
         layout.exportToPDF(out_path, resolution=dpi)
+    elif ext in (".jpg", ".jpeg"):
+        layout.exportToJPEG(out_path, resolution=dpi)
     else:
         layout.exportToPNG(out_path, resolution=dpi)
     if not os.path.exists(out_path):

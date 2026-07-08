@@ -33,7 +33,7 @@ _THEME_HINTS = [
     (r"dem|elev|srtm|terrain|slope|hgt", "terrain map", "terrain"),
     (r"lst|temperature|heat", "temperature map", "magma"),
     (r"lulc|landuse|land_use|land_cover", "LULC map", None),
-    (r"pop|density|densit", "population density map", "oranges"),
+    (r"population|popn|pop_dens|density|densit", "population density map", "oranges"),
     (r"hazard|risk|vulnerab", "hazard risk map", "reds"),
 ]
 
@@ -100,13 +100,18 @@ def suggest(spec: MapSpec, profile: Optional[Dict[str, Any]] = None) -> List[Dic
                       f"time series map {y0}-{y1}",
                       systems=True,
                       why=f"{len(years)} year-tagged rasters form a temporal series"))
-        if sa:
-            out.append(_s(f"Change map {y1} minus {y0}",
-                          "difference of the last vs first epoch (diverging)",
-                          f"change map between {y0} and {y1}",
-                          style={"ramp": "red_blue"}, systems=True,
-                          requires="Spatial Analyst",
-                          why="two co-registered rasters support a difference map"))
+    # a change map needs only TWO epochs (its canonical case) — offer it
+    # whenever >=2 year-tagged rasters exist and Spatial Analyst is available
+    if len(years) >= 2 and sa:
+        y0, y1 = years[0], years[-1]
+        out.append(_s(f"Change map {y1} minus {y0}",
+                      "difference of the last vs first epoch (diverging ramp)",
+                      f"change map between {y0} and {y1}",
+                      style={"ramp": "red_blue"}, systems=True,
+                      requires="Spatial Analyst",
+                      why="the rasters must be co-registered (same CRS + cell "
+                          "grid); the script/user should verify this before "
+                          "differencing"))
     for l in rasters:
         out.append(_s(f"Continuous surface — {l.name}",
                       "stretched raster display",
@@ -125,7 +130,9 @@ def suggest(spec: MapSpec, profile: Optional[Dict[str, Any]] = None) -> List[Dic
                     for l in spec.layers).lower()
     seen_theme = set()
     for pat, depict, ramp in _THEME_HINTS:
-        if re.search(pat, blob) and depict not in seen_theme:
+        # leading-boundary so 'rain' doesn't fire on 'drainage', 'emission'
+        # on 'transmission', etc.
+        if re.search(r"(?<![a-z0-9])(?:" + pat + ")", blob) and depict not in seen_theme:
             seen_theme.add(depict)
             out.append(_s(f"Thematic: {depict}",
                           "apply this map type's cartographic conventions",

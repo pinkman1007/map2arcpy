@@ -36,6 +36,7 @@ def generate(spec: MapSpec, strict: bool = True,
     when given, generation adapts: classic tools on old Pro, basemaps
     commented out without a portal sign-in, aprx_template pre-filled.
     """
+    _normalise_op_names(spec)                 # keep op outputs valid identifiers
     errors = spec.validate()
     if errors and strict:
         raise ValueError("MapSpec invalid:\n  - " + "\n  - ".join(errors))
@@ -157,6 +158,36 @@ def _src(name_or_path: str, spec: MapSpec) -> str:
     if name_or_path in {op.output for op in spec.operations if op.output}:
         return f"os.path.join(results, {name_or_path!r})"
     return repr(name_or_path)
+
+
+def _ident(name: str) -> str:
+    """A safe Python identifier from arbitrary op-output text (spaces, hyphens,
+    leading digits would otherwise make the generated script a SyntaxError)."""
+    import re as _re
+    s = _re.sub(r"\W+", "_", str(name)).strip("_")
+    if not s or s[0].isdigit():
+        s = "r_" + s
+    return s
+
+
+def _normalise_op_names(spec: MapSpec) -> None:
+    """Rewrite every operation output to a valid Python identifier and update
+    all references (op inputs, matching layer names) so the emitted script's
+    assignment targets and gdb paths stay consistent."""
+    rename = {}
+    for op in spec.operations:
+        if op.output:
+            safe = _ident(op.output)
+            if safe != op.output:
+                rename[op.output] = safe
+                op.output = safe
+    if not rename:
+        return
+    for op in spec.operations:
+        op.inputs = [rename.get(i, i) for i in op.inputs]
+    for l in spec.layers:
+        if l.name in rename:
+            l.name = rename[l.name]
 
 
 def _emit_op(op: Operation, spec: MapSpec, ops_map: Dict[str, str]) -> List[str]:
