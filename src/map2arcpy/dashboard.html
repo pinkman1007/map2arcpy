@@ -34,7 +34,7 @@
   label.chk{display:flex;gap:6px;align-items:center;color:var(--dim);font-size:13px;cursor:pointer}
   .examples button{font-size:12.5px;padding:5px 10px;margin:3px 4px 0 0}
   .filebox{border:1px dashed var(--line);border-radius:8px;padding:10px;margin-top:10px;color:var(--dim);font-size:13px}
-  .filebox input{display:none}
+  .filebox input[type=file]{display:none}
   .filebox b{color:var(--text)}
   .tabs{display:flex;gap:4px;margin-bottom:10px}
   .tabs button{background:transparent;border:1px solid var(--line);color:var(--dim);padding:6px 14px;font-size:13px}
@@ -73,7 +73,7 @@
         💾 <b>Best for big data:</b> paste a full path on this computer — the data is read
         in place, nothing is copied, and the script points at your original folder
         <input type="text" id="localpath" placeholder="C:\GIS\data\PERSIANN_1110.zip   (file, .zip, or ArcGrid folder)"
-          style="width:100%;margin-top:8px;background:var(--panel2);color:var(--text);
+          style="display:block;width:100%;margin-top:8px;background:var(--panel2);color:var(--text);
                  border:1px solid var(--line);border-radius:6px;padding:8px;font:13px var(--mono)">
       </div>
       <div class="row">
