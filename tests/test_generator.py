@@ -110,3 +110,17 @@ def test_generated_script_never_clears_user_maps():
     assert "removeLayer" not in code
     assert "check_pro_version()" in code
     assert ".save(" not in code                          # never saves the project
+
+
+def test_runtime_layout_uses_pro3_text_api():
+    """Shakedown finding (real Pro 3.4): text elements are created from the
+    PROJECT, not the Layout. The runtime must try aprx.createTextElement
+    first and never crash the layout stage."""
+    from map2arcpy.generator.runtime import runtime_source
+    src = runtime_source()
+    assert "aprx.createTextElement(layout" in src           # Pro 3.x path
+    assert "layout.createTextElement" in src                # legacy fallback
+    assert "aprx.listStyleItems" in src                     # styles from project
+    code = convert(os.path.join(EXAMPLES, "wards.geojson"))
+    ast.parse(code)
+    assert "_text(aprx, layout" in code

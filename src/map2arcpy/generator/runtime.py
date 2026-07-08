@@ -179,38 +179,69 @@ def build_layout(aprx, the_map, cfg):
         arcpy.Polygon(arcpy.Array([arcpy.Point(1.0, 3.0), arcpy.Point(1.0, h - 3.0),
                                    arcpy.Point(w - 1.0, h - 3.0), arcpy.Point(w - 1.0, 3.0)])),
         the_map, "MainFrame")
-    _text(layout, cfg.get("title", "").upper(), 1.0, h - 2.0, 16, bold=True)
+    _text(aprx, layout, cfg.get("title", "").upper(), 1.0, h - 2.0, 16, bold=True)
     if cfg.get("subtitle"):
-        _text(layout, cfg["subtitle"], 1.0, h - 2.8, 11)
-    _text(layout, cfg.get("credits", ""), 1.0, 1.2, 7)
+        _text(aprx, layout, cfg["subtitle"], 1.0, h - 2.8, 11)
+    _text(aprx, layout, cfg.get("credits", ""), 1.0, 1.2, 7)
     if cfg.get("north_arrow", True):
-        _surround(layout, mf, "NORTH_ARROW", "North_Arrow", w - 3.0, 4.0)
+        _surround(aprx, layout, mf, "NORTH_ARROW", "North_Arrow", w - 3.0, 4.0)
     if cfg.get("scale_bar", True):
-        _surround(layout, mf, "SCALE_BAR", "Scale_Bar", 2.0, 3.4)
+        _surround(aprx, layout, mf, "SCALE_BAR", "Scale_Bar", 2.0, 3.4)
     if cfg.get("legend", True):
-        try:
-            layout.createMapSurroundElement(arcpy.Point(w - 5.0, h / 2), "LEGEND", mf)
-        except Exception as e:
-            log("legend skipped: %s" % e, "WARN")
+        _surround(aprx, layout, mf, "LEGEND", "Legend", w - 5.0, h / 2)
     log("layout built (%s)" % cfg.get("page", "A4P"))
     return layout
 
 
-def _text(layout, text, x, y, size, bold=False):
+def _text(aprx, layout, text, x, y, size, bold=False):
+    """Pro 3.x: text elements are created from the PROJECT
+    (aprx.createTextElement(layout, point, 'POINT', text, size)); older
+    builds had layout.createTextElement. Try both, degrade to a WARN."""
     if not text:
         return None
-    el = layout.createTextElement(arcpy.Point(x, y), text, "POINT")
-    el.textSize = size
-    el.fontStyleName = "Bold" if bold else "Regular"
+    el = None
+    try:
+        el = aprx.createTextElement(layout, arcpy.Point(x, y), "POINT",
+                                    str(text), size)
+    except Exception:
+        try:
+            el = layout.createTextElement(arcpy.Point(x, y), str(text), "POINT")
+        except Exception as e:
+            log("text element skipped (%s...): %s" % (str(text)[:24], e), "WARN")
+            return None
+    for attr, val in (("textSize", size),
+                      ("fontStyleName", "Bold" if bold else "Regular")):
+        try:
+            setattr(el, attr, val)
+        except Exception:
+            pass
     return el
 
 
-def _surround(layout, mf, kind, style_name, x, y):
-    try:
-        style = layout.map.listStyleItems("ArcGIS 2D", style_name)[0]
-        layout.createMapSurroundElement(arcpy.Point(x, y), kind, mf, style)
-    except Exception as e:
-        log("%s skipped: %s" % (kind.lower(), e), "WARN")
+def _surround(aprx, layout, mf, kind, style_name, x, y):
+    """North arrow / scale bar / legend. Styles come from the project;
+    creation is tried on the Layout first, then the project (API moved
+    between Pro releases). Always degrades to a WARN, never crashes."""
+    style = None
+    for cat in (style_name, style_name.replace("_", " ")):
+        try:
+            items = aprx.listStyleItems("ArcGIS 2D", cat)
+            if items:
+                style = items[0]
+                break
+        except Exception:
+            continue
+    err = None
+    for maker in (layout, aprx):
+        for args in (((arcpy.Point(x, y), kind, mf, style) if style is not None
+                      else (arcpy.Point(x, y), kind, mf)),
+                     (arcpy.Point(x, y), kind, mf)):
+            try:
+                return maker.createMapSurroundElement(*args)
+            except Exception as e:
+                err = e
+    log("%s skipped: %s" % (kind.lower(), err), "WARN")
+    return None
 
 
 def add_netcdf(m, results, src, name, variable, x_dim="lon", y_dim="lat"):
