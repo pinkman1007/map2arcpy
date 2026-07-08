@@ -221,7 +221,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):                                        # noqa: N802
-        if self.path not in ("/api/inspect", "/api/generate", "/api/dynamics"):
+        if self.path not in ("/api/inspect", "/api/generate", "/api/dynamics",
+                             "/api/discover"):
             self._json({"error": "not found"}, 404)
             return
         # CSRF guard: browsers cannot send application/json cross-origin
@@ -242,6 +243,13 @@ class _Handler(BaseHTTPRequestHandler):
         if spec is None:
             return
         issues = spec.validate()
+        if self.path == "/api/discover":
+            from .discover import suggest
+            from .probe import load_profile
+            self._json({"suggestions": suggest(spec, load_profile()),
+                        "source_kind": spec.source_kind,
+                        "layers": [l.name for l in spec.layers if l.kind != "basemap"]})
+            return
         if self.path == "/api/inspect":
             self._json({"spec": spec.to_dict(), "issues": issues})
             return

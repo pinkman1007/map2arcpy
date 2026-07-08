@@ -71,6 +71,9 @@ def main(argv=None) -> int:
     st.add_argument("--outline-width", type=float, help="outline width in points")
     st.add_argument("--marker-size", type=float, help="point marker size in points")
 
+    dsc = sub.add_parser("discover", help="list the maps you can make from a data input")
+    dsc.add_argument("input", help="a data file/path (.gpkg, .shp, .geojson, .zip, raster…)")
+
     i = sub.add_parser("inspect", help="show the MapSpec a given input produces")
     i.add_argument("input")
     i.add_argument("--web", action="store_true",
@@ -127,6 +130,19 @@ def main(argv=None) -> int:
                       file=sys.stderr)
                 for x in issues:
                     print(f"#  - {x}", file=sys.stderr)
+            return 0
+        if args.cmd == "discover":
+            from .discover import suggest
+            from .probe import load_profile
+            spec = parse_any(args.input)
+            sug = suggest(spec, load_profile())
+            print(f"# {len(sug)} maps you can make from {args.input}:\n")
+            for i2, s in enumerate(sug, 1):
+                req = f"  [needs {s['requires']}]" if s.get("requires") else ""
+                print(f"{i2:2}. {s['title']}{req}")
+                print(f"    {s['description']} — why: {s['why']}")
+                print(f"    -> map2arcpy generate \"{args.input}\" --depict "
+                      f"\"{s['depict']}\"" + (" --systems" if s.get("systems") else ""))
             return 0
         if args.cmd == "dynamics":
             return _dynamics(args)

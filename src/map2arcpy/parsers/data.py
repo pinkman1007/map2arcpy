@@ -81,6 +81,7 @@ def _geojson(doc: Dict[str, Any], path: str) -> MapSpec:
     lyr.renderer, why = _suggest_renderer(feats, geom)
     if why:
         spec.notes.append(why)
+    lyr.extra["fields"] = _geojson_field_inventory(feats)
     label = _suggest_label(feats)
     if label:
         lyr.label_field = label
@@ -130,6 +131,21 @@ def _suggest_renderer(feats: List[Dict[str, Any]], geom: Optional[str]) -> Tuple
     return Renderer(type="simple", color=col), None
 
 
+def _geojson_field_inventory(feats: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    kinds: Dict[str, set] = {}
+    for f in feats[:500]:
+        for k, v in (f.get("properties") or {}).items():
+            kinds.setdefault(k, set()).add(
+                "numeric" if isinstance(v, (int, float)) and not isinstance(v, bool)
+                else "text" if isinstance(v, str) else "other")
+    out = []
+    for k, ks in kinds.items():
+        t = "numeric" if ks <= {"numeric", "other"} and "numeric" in ks \
+            else "text" if "text" in ks else "other"
+        out.append({"name": k, "type": t})
+    return out
+
+
 def _suggest_label(feats: List[Dict[str, Any]]) -> Optional[str]:
     for f in feats[:50]:
         for k in (f.get("properties") or {}):
@@ -166,6 +182,9 @@ def _shapefile(path: str) -> MapSpec:
 
     # fields from .dbf sidecar
     fields = _dbf_fields(os.path.splitext(path)[0] + ".dbf")
+    lyr.extra["fields"] = [
+        {"name": n, "type": "numeric" if t in ("N", "F") else
+         "text" if t == "C" else "other"} for n, t in fields]
     numeric = [n for n, t in fields if t in ("N", "F") and
                not re.search(r"\b(id|fid|code)\b", n, re.I)]
     text = [n for n, t in fields if t == "C"]
@@ -333,6 +352,12 @@ def _geopackage(path: str) -> MapSpec:
             # field profiling for symbology suggestion
             try:
                 cols = con.execute(f'PRAGMA table_info("{table}")').fetchall()
+                lyr.extra["fields"] = [
+                    {"name": c[1], "type": "numeric" if str(c[2]).upper() in
+                     ("REAL", "DOUBLE", "FLOAT", "INTEGER", "INT", "MEDIUMINT",
+                      "NUMERIC", "BIGINT") else "text" if "CHAR" in str(c[2]).upper()
+                     or "TEXT" in str(c[2]).upper() else "other"}
+                    for c in cols if c[1].lower() not in ("geom", "geometry", "fid")]
                 numeric = [c[1] for c in cols if str(c[2]).upper() in
                            ("REAL", "DOUBLE", "FLOAT", "INTEGER", "INT", "MEDIUMINT")
                            and not re.search(r"\b(id|fid|code)\b", c[1], re.I)]

@@ -90,10 +90,12 @@
       </div>
       <div class="row">
         <button id="btnGen">Generate script</button>
+        <button id="btnDiscover" class="ghost">What can I map?</button>
         <button id="btnInspect" class="ghost">Inspect spec</button>
         <button id="btnClear" class="ghost">Clear</button>
       </div>
       <div id="msg"></div>
+      <div id="discover"></div>
     </div>
 
     <div class="card" style="margin-top:18px">
@@ -399,6 +401,49 @@ $("dyn_go").onclick = async () => {
   }catch(e){ $("dyn_out").innerHTML = `<span style="color:var(--err)">request failed: ${esc(String(e))}</span>`; }
   finally{ $("dyn_go").disabled = false; $("dyn_go").textContent = "Classify"; }
 };
+
+// ---- discover: what maps can I make from this data? --------------------
+$("btnDiscover").onclick = async () => {
+  const p = payload();
+  if(!p.path && !p.file){ $("msg").textContent = "attach data or paste a data path first (discover needs data, not a description)"; return; }
+  $("btnDiscover").disabled = true; $("btnDiscover").textContent = "…";
+  $("discover").innerHTML = "";
+  try{
+    const r = await fetch("/api/discover", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(p)});
+    const j = await r.json();
+    if(!r.ok){ $("msg").textContent = j.error || "error"; return; }
+    if(!j.suggestions || !j.suggestions.length){
+      $("discover").innerHTML = '<div style="color:var(--dim);font-size:13px;margin-top:8px">No suggestions — the data may lack mappable fields.</div>';
+      return;
+    }
+    let html = `<div style="margin-top:10px;font-size:12.5px;color:var(--dim)">${j.suggestions.length} maps you can make from this data — click one to load it:</div>`;
+    j.suggestions.forEach((s,i) => {
+      const req = s.requires ? `<span class="pill">needs ${esc(s.requires)}</span>` : "";
+      const sys = s.systems ? '<span class="pill">systems</span>' : "";
+      html += `<div class="sugg" data-i="${i}" style="margin-top:6px;padding:8px 10px;
+        background:var(--panel2);border:1px solid var(--line);border-radius:8px;cursor:pointer">
+        <b style="color:var(--teal-bright)">${esc(s.title)}</b> ${req}${sys}
+        <div style="font-size:12px;color:var(--dim)">${esc(s.description)} — <i>${esc(s.why)}</i></div></div>`;
+    });
+    $("discover").innerHTML = html;
+    window._suggestions = j.suggestions;
+    document.querySelectorAll(".sugg").forEach(el => el.onclick = () => loadSuggestion(window._suggestions[+el.dataset.i]));
+  }catch(e){ $("msg").textContent = "request failed: " + e; }
+  finally{ $("btnDiscover").disabled = false; $("btnDiscover").textContent = "What can I map?"; }
+};
+function loadSuggestion(s){
+  $("input").value = s.depict || "";
+  if(s.systems) $("systems").checked = true;
+  // apply the suggestion's style hints to the style panel
+  if(s.style){
+    if(s.style.ramp) $("st_ramp").value = s.style.ramp;
+    if(s.style.transparency!=null) $("st_transparency").value = s.style.transparency;
+    if(s.style.outline) $("st_outline").value = s.style.outline;
+  }
+  $("msg").textContent = "loaded — click Generate script to build it";
+  $("input").scrollIntoView({behavior:"smooth", block:"center"});
+}
 
 $("btnGen").onclick = () => call("/api/generate", $("btnGen"));
 $("btnInspect").onclick = () => call("/api/inspect", $("btnInspect"));
