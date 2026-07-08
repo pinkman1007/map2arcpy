@@ -116,7 +116,7 @@ def _suggest_renderer(feats: List[Dict[str, Any]], geom: Optional[str]) -> Tuple
             if kinds <= {"int", "float", "none"} and not re.search(r"\b(id|fid|code|objectid)\b", k, re.I):
                 vals = [p.get(k) for p in props if isinstance(p.get(k), (int, float))]
                 if len(set(vals)) > 5:
-                    return (Renderer(type="graduated", field=k, ramp=RAMPS[DEFAULT_RAMP]),
+                    return (Renderer(type="graduated", field=k, ramp=RAMPS[DEFAULT_RAMP], ramp_name=DEFAULT_RAMP),
                             f"numeric field '{k}' found — proposed a graduated (choropleth) renderer; "
                             f"swap the field in CONFIG if another attribute suits better")
         for k, kinds in fields.items():
@@ -189,7 +189,7 @@ def _shapefile(path: str) -> MapSpec:
                not re.search(r"\b(id|fid|code)\b", n, re.I)]
     text = [n for n, t in fields if t == "C"]
     if numeric:
-        lyr.renderer = Renderer(type="graduated", field=numeric[0], ramp=RAMPS[DEFAULT_RAMP])
+        lyr.renderer = Renderer(type="graduated", field=numeric[0], ramp=RAMPS[DEFAULT_RAMP], ramp_name=DEFAULT_RAMP)
         spec.notes.append(f"numeric field '{numeric[0]}' found in the .dbf — proposed a "
                           "graduated renderer; change the field if needed")
     else:
@@ -363,7 +363,7 @@ def _geopackage(path: str) -> MapSpec:
                            and not re.search(r"\b(id|fid|code)\b", c[1], re.I)]
                 if numeric:
                     lyr.renderer = Renderer(type="graduated", field=numeric[0],
-                                            ramp=RAMPS[DEFAULT_RAMP])
+                                            ramp=RAMPS[DEFAULT_RAMP], ramp_name=DEFAULT_RAMP)
                     spec.notes.append(f"gpkg '{table}': numeric field "
                                       f"'{numeric[0]}' — proposed graduated renderer")
                 for c in cols:
@@ -506,7 +506,7 @@ def _csv_xy(path: str) -> MapSpec:
             vals = [r[i] for r in sample if i < len(r) and r[i]]
             if vals and all(re.fullmatch(r"-?\d+(\.\d+)?", v) for v in vals[:50]):
                 lyr.renderer = Renderer(type="graduated", field=c,
-                                        ramp=RAMPS[DEFAULT_RAMP])
+                                        ramp=RAMPS[DEFAULT_RAMP], ramp_name=DEFAULT_RAMP)
                 spec.notes.append(f"CSV: numeric column '{c}' — proposed "
                                   "graduated symbology")
                 break

@@ -160,7 +160,8 @@ def parse(text: str, name_hint: str = "described map") -> MapSpec:
     elif g and final_layer is not None:
         fld = (g.group(1) or "").strip().split(" using")[0].strip() or None
         final_layer.renderer = Renderer(type="graduated", field=fld or "VALUE",
-                                        ramp=RAMPS.get(ramp or DEFAULT_RAMP))
+                                        ramp=RAMPS.get(ramp or DEFAULT_RAMP),
+                                        ramp_name=(ramp or DEFAULT_RAMP))
         if not fld:
             final_layer.notes.append("graduated field not named in the description — "
                                      "replace 'VALUE' with the real field")
@@ -168,6 +169,15 @@ def parse(text: str, name_hint: str = "described map") -> MapSpec:
         col = _color(low)
         if col and final_layer is not None:
             final_layer.renderer = Renderer(type="simple", color=col)
+
+    # a named ramp ("using blues") applies to raster stretch layers too, not
+    # just graduated vectors — otherwise a "rainfall map ... using blues" got
+    # a grey default raster
+    if ramp:
+        for l in spec.layers:
+            if l.renderer.type == "stretch":
+                l.renderer.ramp = list(RAMPS[ramp])
+                l.renderer.ramp_name = ramp
 
     lab = _LABEL_RE.search(t)
     if lab and final_layer is not None:

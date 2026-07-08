@@ -86,6 +86,7 @@ def apply_style(spec: MapSpec, style: Dict[str, Any]) -> MapSpec:
             for l in spec.layers:
                 if l.renderer.type in ("graduated", "stretch"):
                     l.renderer.ramp = list(RAMPS[ramp])
+                    l.renderer.ramp_name = ramp
                     n += 1
             applied.append(f"ramp={ramp} ({n} layers)")
         else:
@@ -96,6 +97,7 @@ def apply_style(spec: MapSpec, style: Dict[str, Any]) -> MapSpec:
         for l in spec.layers:
             if l.renderer.ramp:
                 l.renderer.ramp = list(reversed(l.renderer.ramp))
+                l.renderer.ramp_name = None    # reversed: exact hex used, no Pro named ramp
                 n += 1
         applied.append(f"reverse_ramp ({n} layers)")
 

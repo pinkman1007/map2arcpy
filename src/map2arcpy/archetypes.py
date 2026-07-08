@@ -115,9 +115,11 @@ def apply(spec: MapSpec, text: str) -> MapSpec:
             r = l.renderer
             if r.type == "stretch" and not r.ramp:
                 r.ramp = ramp
+                r.ramp_name = ramp_name
                 touched.append(l.name)
             elif r.type == "graduated" and (not r.ramp or r.ramp == default):
                 r.ramp = ramp
+                r.ramp_name = ramp_name
                 touched.append(l.name)
 
     if arch.get("renderer") == "unique":
@@ -146,7 +148,7 @@ def apply(spec: MapSpec, text: str) -> MapSpec:
             out = rings_op.output or "esz_rings"
             rings_lyr = next((l for l in spec.layers if l.name == out), None)
             renderer = Renderer(type="graduated", field="distance",
-                                ramp=list(RAMPS["sensitivity"]))
+                                ramp=list(RAMPS["sensitivity"]), ramp_name="sensitivity")
             if rings_lyr is None:
                 spec.layers.append(Layer(name=out, source="", kind="vector",
                                          renderer=renderer))

@@ -45,6 +45,7 @@ def hex_to_rgb(h):
 def setup_env(work_dir, epsg):
     """scratch.gdb + results.gdb beside the script; CRS locked; perf env."""
     banner("ENVIRONMENT SETUP")
+    _render_reset()
     scratch = os.path.join(work_dir, "scratch.gdb")
     results = os.path.join(work_dir, "results.gdb")
     for gdb in (scratch, results):
@@ -180,8 +181,94 @@ def _ramp_interp(ramp, n):
     return out
 
 
+#: map2arcpy ramp names -> ArcGIS Pro built-in colour-ramp name patterns
+#: (tried in order against aprx.listColorRamps until one matches)
+RAMP_PRO_NAMES = {
+    "greens": ["Greens (Continuous)", "Greens", "Green*"],
+    "blues": ["Blues (Continuous)", "Blues", "Blue*"],
+    "reds": ["Reds (Continuous)", "Reds", "Red*"],
+    "oranges": ["Oranges (Continuous)", "Oranges", "Orange*"],
+    "purples": ["Purples (Continuous)", "Purples", "Purple*"],
+    "greys": ["Grays (Continuous)", "Grays", "Gray*", "Greys*"],
+    "viridis": ["Viridis", "Viridis*"],
+    "magma": ["Magma", "Inferno", "Magma*"],
+    "plasma": ["Plasma", "Plasma*"],
+    "cividis": ["Cividis", "Cividis*"],
+    "red_blue": ["Red-Blue (Continuous)", "Blue-Red*", "Red-Blue*"],
+    "brown_teal": ["Brown-Blue-Green (Continuous)", "Brown-Teal*", "Teal*"],
+    "spectral": ["Spectral (Continuous)", "Spectral*"],
+    "red_yellow_green": ["Red-Yellow-Green (Continuous)", "Condition Number*",
+                         "Red-Yellow-Green*"],
+    "pink_green": ["Purple-Green (Continuous)", "Pink*"],
+    "sensitivity": ["Red-Yellow-Green (Continuous)", "Condition Number*"],
+    "ndvi": ["Brown-Green*", "Precipitation*"],
+    "terrain": ["Elevation #1", "Elevation*"],
+    "thermal": ["Yellow-Orange-Red*", "Heat*"],
+}
+
+#: render tally so a run can report how many layers actually got symbolised
+_RENDER = {"ok": [], "fallback": []}
+
+
+def _render_reset():
+    _RENDER["ok"] = []
+    _RENDER["fallback"] = []
+
+
+def _field_exists(layer, field):
+    """True if `field` is on the layer; None-safe. Returns True when we can't
+    check (so we don't block), False only when we positively know it's absent."""
+    if not field:
+        return True
+    try:
+        names = [f.name for f in arcpy.ListFields(layer)]
+        if field in names:
+            return True
+        log("field '%s' not found on '%s' — available: %s" %
+            (field, layer.name, ", ".join(names[:20])), "WARN")
+        return False
+    except Exception:
+        return True
+
+
+def _find_color_ramp(ramp_name):
+    """A Pro ColorRamp object matching a map2arcpy ramp name, or None."""
+    if not ramp_name:
+        return None
+    try:
+        aprx = arcpy.mp.ArcGISProject("CURRENT")
+    except Exception:
+        return None
+    for pat in RAMP_PRO_NAMES.get(ramp_name, [ramp_name]):
+        try:
+            ramps = aprx.listColorRamps(pat)
+            if ramps:
+                return ramps[0]
+        except Exception:
+            continue
+    return None
+
+
+def render_report():
+    """Print a summary of what actually got symbolised — turns a silent
+    'map looks unstyled' into a diagnosable line."""
+    ok, fb = _RENDER["ok"], _RENDER["fallback"]
+    total = len(ok) + len(fb)
+    if not total:
+        return
+    banner("RENDER REPORT")
+    log("symbology applied to %d of %d layers" % (len(ok), total))
+    for name, why in fb:
+        log("  fell back to default on '%s': %s" % (name, why), "WARN")
+    if not fb:
+        log("all layers symbolised as intended")
+
+
 def apply_unique(layer, field, mapping):
     """Categorical (unique values) renderer from a {value: hex} mapping."""
+    if not _field_exists(layer, field):
+        _RENDER["fallback"].append((layer.name, "field '%s' absent" % field))
+        return
     try:
         sym = layer.symbology
         sym.updateRenderer("UniqueValueRenderer")
@@ -198,8 +285,10 @@ def apply_unique(layer, field, mapping):
                 if hexc:
                     itm.symbol.color = {"RGB": hex_to_rgb(hexc)}
         layer.symbology = sym
+        _RENDER["ok"].append(layer.name)
         log("unique-value symbology on '%s' (%d classes)" % (field, len(mapping)))
     except Exception as e:
+        _RENDER["fallback"].append((layer.name, str(e)))
         log("unique symbology skipped: %s" % e, "WARN")
 
 
@@ -208,6 +297,9 @@ def apply_graduated(layer, field, breaks, ramp, method=None, class_count=0):
     quantile, equal_interval, geometric, std_dev); `class_count` sets the
     number of classes (ramp is interpolated to match). Explicit `breaks`
     override the method."""
+    if not _field_exists(layer, field):
+        _RENDER["fallback"].append((layer.name, "field '%s' absent" % field))
+        return
     try:
         sym = layer.symbology
         sym.updateRenderer("GraduatedColorsRenderer")
@@ -227,15 +319,45 @@ def apply_graduated(layer, field, breaks, ramp, method=None, class_count=0):
             if i < len(colours):
                 brk.symbol.color = {"RGB": hex_to_rgb(colours[i])}
         layer.symbology = sym
+        _RENDER["ok"].append(layer.name)
         log("graduated symbology on '%s', %d classes%s" %
             (field, n, (" (" + method + ")") if method else ""))
     except Exception as e:
+        _RENDER["fallback"].append((layer.name, str(e)))
         log("graduated symbology skipped: %s" % e, "WARN")
 
 
-def apply_stretch(layer, ramp):
-    """Continuous raster: leave Pro's stretch, note the intended ramp."""
-    log("stretch renderer kept for '%s' (intended ramp: %s)" % (layer.name, ramp))
+def apply_stretch(layer, ramp, ramp_name=None):
+    """Continuous raster: apply a real colour ramp via the stretch colorizer
+    (verified API: layer.symbology.colorizer.colorRamp <- aprx.listColorRamps).
+    Falls back to Pro's default stretch with a clear WARN when no matching
+    named ramp is found."""
+    try:
+        sym = layer.symbology
+        if not hasattr(sym, "colorizer"):
+            _RENDER["fallback"].append((layer.name, "no colorizer (not a raster?)"))
+            log("stretch: '%s' has no colorizer — is it a raster?" % layer.name, "WARN")
+            return
+        try:
+            if getattr(sym.colorizer, "type", "") != "RasterStretchColorizer":
+                sym.updateColorizer("RasterStretchColorizer")
+        except Exception as e:
+            log("stretch: could not switch '%s' to a stretch colorizer: %s"
+                % (layer.name, e), "WARN")
+        cr = _find_color_ramp(ramp_name)
+        if cr is not None:
+            sym.colorizer.colorRamp = cr
+            layer.symbology = sym
+            _RENDER["ok"].append(layer.name)
+            log("raster colour ramp '%s' applied to '%s'" % (ramp_name, layer.name))
+        else:
+            _RENDER["fallback"].append(
+                (layer.name, "no Pro ramp matched '%s'" % (ramp_name or "?")))
+            log("raster ramp for '%s' not matched in Pro styles — default stretch "
+                "kept (intended: %s)" % (layer.name, ramp_name or ramp), "WARN")
+    except Exception as e:
+        _RENDER["fallback"].append((layer.name, str(e)))
+        log("stretch colorizer skipped on '%s': %s" % (layer.name, e), "WARN")
 
 
 def build_layout(aprx, the_map, cfg):

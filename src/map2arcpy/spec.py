@@ -64,6 +64,7 @@ class Renderer:
     color: Optional[str] = None                # simple: single hex
     color_map: Dict[str, str] = dataclasses.field(default_factory=dict)   # unique: value->hex
     ramp: List[str] = dataclasses.field(default_factory=list)             # graduated/stretch hexes
+    ramp_name: Optional[str] = None            # named ramp (blues, viridis…) for raster colorizers
     breaks: List[float] = dataclasses.field(default_factory=list)         # graduated class breaks
     outline: Optional[str] = None
     transparency: int = 0                      # 0-100

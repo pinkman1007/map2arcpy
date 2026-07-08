@@ -254,7 +254,7 @@ def _emit_layer_add(l: Layer, spec: MapSpec, basemap_ok: bool = True) -> List[st
         body.append(f"apply_graduated(lyr, {r.field!r}, {r.breaks!r}, {r.ramp!r}, "
                     f"{r.class_method!r}, {int(r.class_count)})")
     elif r.type == "stretch":
-        body.append(f"apply_stretch(lyr, {r.ramp!r})")
+        body.append(f"apply_stretch(lyr, {r.ramp!r}, {r.ramp_name!r})")
     elif r.color:
         body.append(f"apply_simple(lyr, {r.color!r}, {r.outline!r}, "
                     f"{int(r.transparency)}, {r.outline_width}, {r.marker_size})")
@@ -369,6 +369,7 @@ def _main_block(spec: MapSpec, ops_map: Dict[str, str],
         "    if not os.path.isabs(out_path):",
         "        out_path = os.path.join(work_dir, out_path)",
         "    export_layout(layout, out_path, CONFIG['dpi'])",
+        "    render_report()",
         "    show_in_pro(aprx, m, layout)",
         "    log('ALL DONE')",
         "",
