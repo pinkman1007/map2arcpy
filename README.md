@@ -95,7 +95,7 @@ enable the geocode/OSM/AGOL enrichment as a checkbox in the UI.
 JSON API, if you'd rather script it: `GET /health`, `GET /api/examples`,
 `POST /api/inspect` and `POST /api/generate` with
 `{"input": "...", "web": false, "strict": false}` or
-`{"file": {"name": "x.lyrx", "content_b64": "..."}}`.
+`{"file": {"name": "x.lyrx", "content_b64": "..."}}` or — best for big data — `{"path": "C:\\GIS\\data.zip"}` to read a file in place on the machine running the server.
 
 The server binds `127.0.0.1` and has **no authentication** — it's a personal
 tool UI. Don't expose it beyond localhost without putting a proxy in front.

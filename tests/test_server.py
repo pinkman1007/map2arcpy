@@ -104,3 +104,32 @@ def test_strict_mode_via_api_returns_422():
     # same input without strict generates with TODOs instead
     status, j = _post("/api/generate", {"input": "buffer by 500 m"})
     assert status == 200 and j["todos"] >= 1
+
+
+def test_local_path_mode_reads_in_place():
+    """v0.6.0: paste a path -> data read where it lives, nothing copied."""
+    lyrx = os.path.abspath(os.path.join(EXAMPLES, "landuse.lyrx"))
+    before = set(os.listdir(srv._Handler.upload_dir))
+    status, j = _post("/api/generate", {"path": f'  "{lyrx}"  '})   # quoted+padded
+    assert status == 200
+    assert j["spec"]["source_kind"] == "lyrx"
+    # read in place: nothing NEW lands in the upload dir
+    assert set(os.listdir(srv._Handler.upload_dir)) == before
+
+
+def test_local_path_missing_is_clean_error():
+    status, j = _post("/api/generate", {"path": "C:/nope/definitely_missing.shp"})
+    assert status == 400 and "path not found" in j["error"]
+
+
+def test_non_json_content_type_rejected():
+    """CSRF guard: form-style posts (no preflight) must be refused."""
+    req = urllib.request.Request(BASE + "/api/generate",
+                                 data=b'{"input":"x.shp map"}',
+                                 headers={"Content-Type": "text/plain"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            code = r.status
+    except urllib.error.HTTPError as e:
+        code = e.code
+    assert code == 415

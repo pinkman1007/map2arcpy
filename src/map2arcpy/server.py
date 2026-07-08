@@ -97,6 +97,16 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _resolve_input(self, doc: Dict[str, Any]) -> Optional[Tuple[str, str]]:
         """Return (input_for_parse_any, nl_text_for_web) or None after erroring."""
+        # local-path mode: the server runs on this machine, so it can read
+        # the data IN PLACE — no copy, generated scripts point at the
+        # original location (zips extract to a sibling _unzipped folder)
+        local = doc.get("path")
+        if isinstance(local, str) and local.strip():
+            p = local.strip().strip('"').strip("'")
+            if not os.path.exists(p):
+                self._json({"error": f"path not found on this machine: {p}"}, 400)
+                return None
+            return p, ""
         f = doc.get("file")
         if isinstance(f, dict) and f.get("content_b64"):
             name = os.path.basename(str(f.get("name", "upload")))
@@ -167,6 +177,14 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):                                        # noqa: N802
         if self.path not in ("/api/inspect", "/api/generate"):
             self._json({"error": "not found"}, 404)
+            return
+        # CSRF guard: browsers cannot send application/json cross-origin
+        # without a CORS preflight (which this server never grants), so
+        # requiring it blocks hostile web pages from driving a local server
+        # that can read file paths.
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip()
+        if ctype != "application/json":
+            self._json({"error": "Content-Type must be application/json"}, 415)
             return
         doc = self._read_body()
         if doc is None:
