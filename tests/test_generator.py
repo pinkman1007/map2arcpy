@@ -124,3 +124,13 @@ def test_runtime_layout_uses_pro3_text_api():
     code = convert(os.path.join(EXAMPLES, "wards.geojson"))
     ast.parse(code)
     assert "_text(aprx, layout" in code
+
+
+def test_scripts_define_crs_on_unknown_datasets():
+    """Shakedown finding #2: rasters without an EPSG tag (PERSIANN) raise
+    coordinate-system errors in Pro — scripts must define the CRS first."""
+    from map2arcpy.generator.runtime import runtime_source
+    assert "def ensure_crs_defined" in runtime_source()
+    code = convert(os.path.join(EXAMPLES, "wards.geojson"))
+    assert "ensure_crs_defined(CONFIG['sources'], CONFIG['epsg'])" in code
+    ast.parse(code)

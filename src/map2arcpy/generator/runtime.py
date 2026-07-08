@@ -97,6 +97,25 @@ def audit_exists(paths):
     log("input audit OK (%d datasets)" % len(paths))
 
 
+def ensure_crs_defined(sources, epsg):
+    """Datasets with an UNKNOWN coordinate system (common with downloaded
+    rasters whose GeoTIFF tags lack an EPSG code) get one defined so Pro
+    can place them. DefineProjection only writes metadata — it never
+    reprojects pixels — and is skipped for anything that already has a CRS."""
+    sr = arcpy.SpatialReference(int(epsg))
+    for name, src in sources.items():
+        if not src or str(src).startswith("http"):
+            continue
+        try:
+            d = arcpy.Describe(src)
+            sr_name = getattr(getattr(d, "spatialReference", None), "name", "") or ""
+            if sr_name.lower() in ("", "unknown"):
+                arcpy.management.DefineProjection(src, sr)
+                log("CRS was undefined on '%s' -> defined EPSG:%s" % (name, epsg))
+        except Exception as e:
+            log("CRS check skipped for '%s': %s" % (name, e), "WARN")
+
+
 def ensure_projected(fc, epsg, out):
     """Reproject a vector dataset to the target CRS if it isn't already."""
     code = arcpy.Describe(fc).spatialReference.factoryCode

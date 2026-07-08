@@ -289,6 +289,7 @@ def _main_block(spec: MapSpec, ops_map: Dict[str, str],
              "    work_dir = os.path.dirname(os.path.abspath(__file__)) or os.getcwd()",
              "    scratch, results = setup_env(work_dir, CONFIG['epsg'])",
              "    audit_exists(list(CONFIG['sources'].values()))",
+             "    ensure_crs_defined(CONFIG['sources'], CONFIG['epsg'])",
              ""]
 
     if spec.operations:
