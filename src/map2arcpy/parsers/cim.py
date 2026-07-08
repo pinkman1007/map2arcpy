@@ -69,17 +69,24 @@ def parse(path: str) -> MapSpec:
 
 
 # ---------------------------------------------------------------------------
+_MAX_ENTRY_BYTES = 32 * 1024 * 1024      # zip-bomb guard: skip absurd entries
+
+
 def _aprx_docs(path: str) -> List[Dict[str, Any]]:
     docs = []
     with zipfile.ZipFile(path) as z:
-        for name in z.namelist():
-            if name.lower().endswith((".json", ".mapx")) or "/" not in name:
-                try:
-                    with z.open(name) as f:
-                        raw = f.read()
-                    docs.append(json.loads(raw.decode("utf-8-sig")))
-                except (ValueError, UnicodeDecodeError):
-                    continue
+        for info in z.infolist():
+            name = info.filename
+            if not (name.lower().endswith((".json", ".mapx")) or "/" not in name):
+                continue
+            if info.file_size > _MAX_ENTRY_BYTES:
+                continue                      # no CIM document is this large
+            try:
+                with z.open(info) as f:
+                    raw = f.read(_MAX_ENTRY_BYTES + 1)
+                docs.append(json.loads(raw.decode("utf-8-sig")))
+            except (ValueError, UnicodeDecodeError):
+                continue
     if not docs:
         raise ValueError(f"{path}: no CIM JSON documents found inside the .aprx")
     return docs

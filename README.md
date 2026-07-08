@@ -92,7 +92,7 @@ Parsers normalise every input into a tiny JSON-serialisable IR (`MapSpec`:
 layers, renderers, operations, layout); a template generator compiles the IR
 into a single-file script with an inlined runtime (env setup, QA gates, CIM
 symbology helpers, programmatic layout, verified export). Details in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the gap register — what this tool knowingly does not do — in [docs/GAPS.md](docs/GAPS.md). The arcpy idioms in the runtime
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the gap register — what this tool knowingly does not do — in [docs/GAPS.md](docs/GAPS.md), and the failure-mode register in [docs/PREMORTEM.md](docs/PREMORTEM.md). The arcpy idioms in the runtime
 are distilled from production ArcGIS Pro figure pipelines.
 
 ## Development
@@ -114,3 +114,6 @@ The whole test suite (parsers, generator, CLI) runs without ArcGIS Pro.
 ## License
 
 MIT © 2026 UDAAR
+
+*Not affiliated with or endorsed by Esri. "ArcGIS", "ArcGIS Pro" and "arcpy"
+are trademarks of Esri, referenced here only to describe interoperability.*

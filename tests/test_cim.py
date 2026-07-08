@@ -72,3 +72,15 @@ def test_aprx_zip_package(tmp_path):
     assert spec.source_kind == "aprx"
     assert spec.crs_epsg == 3857
     assert spec.layout.title == "Packaged Map"
+
+
+def test_aprx_zip_bomb_entry_skipped(tmp_path):
+    """Premortem: a hostile .aprx with a giant entry must not exhaust memory."""
+    p = tmp_path / "bomb.aprx"
+    with zipfile.ZipFile(p, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("huge.json", "[" + " " * (40 * 1024 * 1024) + "]")
+        z.writestr("map.json", json.dumps({"type": "CIMMap", "name": "Tiny",
+                                           "spatialReference": {"wkid": 4326},
+                                           "layerDefinitions": []}))
+    spec = cim.parse(str(p))
+    assert spec.layout.title == "Tiny"                   # big entry skipped, small parsed

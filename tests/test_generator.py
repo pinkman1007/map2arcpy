@@ -81,3 +81,32 @@ def test_runtime_importable_without_arcpy():
     src = runtime.runtime_source()
     ast.parse(src)
     assert "def setup_env" in src and "def export_layout" in src
+
+
+def test_hostile_title_cannot_escape_docstring():
+    """Premortem: layer/map names come from input files — a crafted name must
+    never become executable code in the generated script."""
+    from map2arcpy.spec import Layout
+    spec = MapSpec(layers=[Layer(name="x", source="x.shp")],
+                   layout=Layout(title='pwned"""\nimport os; os.system("x")\n"""'))
+    code = generate(spec, strict=False)
+    tree = ast.parse(code)
+    # module must start with a plain docstring; no injected statements before main
+    assert isinstance(tree.body[0].value.value, str)
+    assert "os.system" in tree.body[0].value.value      # trapped INSIDE the string
+    docstring_part = code.split("# CONFIG")[0]           # CONFIG uses repr() — safe by construction
+    assert docstring_part.count('"""') == 2              # header docstring stays balanced
+    # the payload may survive as an inert, repr-escaped string constant, but
+    # there must be no actual os.system CALL anywhere in the module
+    evil_calls = [n for n in ast.walk(tree)
+                  if isinstance(n, ast.Call)
+                  and isinstance(n.func, ast.Attribute) and n.func.attr == "system"]
+    assert not evil_calls
+
+
+def test_generated_script_never_clears_user_maps():
+    code = convert(os.path.join(EXAMPLES, "wards.geojson"))
+    assert "fresh_map(aprx" in code
+    assert "removeLayer" not in code
+    assert "check_pro_version()" in code
+    assert ".save(" not in code                          # never saves the project

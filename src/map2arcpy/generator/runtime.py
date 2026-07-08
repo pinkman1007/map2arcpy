@@ -62,6 +62,32 @@ def setup_env(work_dir, epsg):
     return scratch, results
 
 
+def check_pro_version(min_major=3):
+    """Programmatic layouts (createLayout/createMapFrame) need ArcGIS Pro 3.x —
+    warn up front instead of failing halfway through."""
+    try:
+        ver = str(arcpy.GetInstallInfo().get("Version", "0"))
+        if int(ver.split(".")[0]) < min_major:
+            log("ArcGIS Pro %s detected — this script's layout section needs "
+                "Pro %d.x or newer" % (ver, min_major), "WARN")
+    except Exception:                          # never block the run on a probe
+        pass
+
+
+def fresh_map(aprx, name):
+    """Always build in a NEW map so the user's existing maps are never
+    touched. Falls back to the first map WITHOUT clearing it."""
+    try:
+        return aprx.createMap(str(name)[:80] or "map2arcpy")
+    except Exception as e:
+        log("createMap unavailable (%s) — using the first existing map; "
+            "your layers are NOT removed" % e, "WARN")
+        maps = aprx.listMaps()
+        if not maps:
+            raise RuntimeError("project has no maps and createMap failed")
+        return maps[0]
+
+
 def audit_exists(paths):
     """QA gate — one consolidated missing-input failure, before any work."""
     missing = [p for p in paths if p and not str(p).startswith("http")
