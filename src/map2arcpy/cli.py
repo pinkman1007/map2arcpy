@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 
 from . import __version__
@@ -72,6 +73,17 @@ def main(argv=None) -> int:
     e.add_argument("--list", action="store_true")
     e.add_argument("--run", metavar="NAME", help="generate a script from a named example")
 
+    dy = sub.add_parser("dynamics", help="classify a time series against the "
+                                         "systems-dynamics behaviour archetypes")
+    dy.add_argument("series", help="comma-separated numbers, e.g. "
+                                   "\"120,138,161,190,224\" (a stock over time)")
+    dy.add_argument("--kind", choices=["stock", "problem"], default="stock",
+                    help="'stock' (accumulation) or 'problem' (symptom metric)")
+    dy.add_argument("--times", help="optional matching times, e.g. "
+                                    "\"2015,2016,2017,2018,2019\"")
+    dy.add_argument("--vs", help="a second series for two-actor archetypes "
+                                 "(success-to-successful / escalation)")
+
     pr = sub.add_parser("probe", help="sync with ArcGIS Pro: write the one-time "
                                       "environment probe script")
     pr.add_argument("-o", "--output", default="map2arcpy_probe.py",
@@ -109,6 +121,8 @@ def main(argv=None) -> int:
                 for x in issues:
                     print(f"#  - {x}", file=sys.stderr)
             return 0
+        if args.cmd == "dynamics":
+            return _dynamics(args)
         if args.cmd == "probe":
             return _probe(args)
         if args.cmd == "serve":
@@ -144,6 +158,26 @@ def _enrich(spec, inp: str, out_dir: str) -> None:
         with open(inp, "r", encoding="utf-8-sig") as f:
             text = f.read()
     web.enrich(spec, text, out_dir)
+
+
+def _dynamics(args) -> int:
+    import json as _json
+    from . import dynamics
+
+    def _nums(s):
+        return [float(v) for v in re.split(r"[,\s]+", s.strip()) if v]
+    try:
+        series = _nums(args.series)
+    except ValueError:
+        print("dynamics: series must be numbers", file=sys.stderr)
+        return 1
+    if args.vs:
+        res = dynamics.classify_pair(series, _nums(args.vs))
+    else:
+        times = _nums(args.times) if args.times else None
+        res = dynamics.classify(series, times, kind=args.kind)
+    print(_json.dumps(res, indent=2))
+    return 0
 
 
 def _probe(args) -> int:

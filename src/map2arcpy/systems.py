@@ -199,10 +199,32 @@ def apply(spec: MapSpec, depict_text: str = "") -> MapSpec:
         lines.append("Feedback loops:")
         lines.extend("  - " + lp for lp in loops)
 
+    # --- temporal series -> behaviour-archetype hook -----------------------
+    years = _detect_years(spec)
+    if len(years) >= 3:
+        lines.append(f"Temporal series detected: {len(years)} epochs "
+                     f"({years[0]}-{years[-1]}). This stock over time can be "
+                     "classified against the behaviour archetypes (Limits to "
+                     "Growth, Overshoot, etc.): compute the per-epoch metric "
+                     "(zonal sum / class area) in Pro, then run "
+                     f"`map2arcpy dynamics \"v1,v2,...,vN\"`.")
+        spec.notes.append(f"systems: {len(years)} time epochs found "
+                          f"({years[0]}-{years[-1]}) — after computing the "
+                          "per-year metric, classify its behaviour with "
+                          "`map2arcpy dynamics`")
+
     spec.systems_context = lines
     spec.notes.append(f"systems: context added for '{name}' — see the SYSTEMS "
                       "CONTEXT block in the script header")
     return spec
+
+
+def _detect_years(spec: MapSpec) -> List[int]:
+    yrs = set()
+    for l in spec.layers:
+        for m in re.finditer(r"\b(19|20)\d{2}\b", l.name + " " + str(l.source)):
+            yrs.add(int(m.group(0)))
+    return sorted(yrs)
 
 
 # ---------------------------------------------------------------------------
