@@ -91,7 +91,21 @@ notes) rather than hard. **Watch signal:** Pro release notes mentioning CIM
 schema changes → extend `tests/test_cim.py` fixtures with a real file from
 that version.
 
-## 8. "The name got us a trademark letter." — LOW, ADDRESSED
+## 8. "--web leaked something / broke ToS / rotted." — OPEN (managed)
+
+The web pass sends place names and feature keywords to third parties
+(Nominatim, Overpass, ArcGIS Online). For most planning work that's
+harmless, but a user mapping something sensitive (a defence site, a
+confidential project location) may not expect any network egress from a
+"local" tool. Mitigations: web is strictly opt-in per invocation, the
+README says exactly which services are called, failures degrade to notes,
+and the offline core is untouched. Endpoint drift (Overpass mirrors change,
+Nominatim policy tightens) is detected by exactly one thing: the mocked
+tests keep passing while real calls fail. **Watch signal:** any issue titled
+"--web stopped working" → add a `map2arcpy doctor --web` connectivity probe
+and make endpoints configurable via environment variables.
+
+## 9. "The name got us a trademark letter." — LOW, ADDRESSED
 
 "arcpy" appears in the name of an unaffiliated tool. Nominative use of an
 API name is normal in the ecosystem (dozens of `arcpy-*` repos), and the

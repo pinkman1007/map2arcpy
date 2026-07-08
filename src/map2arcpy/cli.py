@@ -41,9 +41,14 @@ def main(argv=None) -> int:
     g.add_argument("--spec", default=None, help="also write the intermediate MapSpec JSON here")
     g.add_argument("--strict", action="store_true",
                    help="fail on spec problems instead of embedding TODOs")
+    g.add_argument("--web", action="store_true",
+                   help="allow web lookups: geocode places (Nominatim), download "
+                        "OSM features (Overpass), find ArcGIS Online layers")
 
     i = sub.add_parser("inspect", help="show the MapSpec a given input produces")
     i.add_argument("input")
+    i.add_argument("--web", action="store_true",
+                   help="apply the same web enrichment before showing the spec")
 
     e = sub.add_parser("examples", help="built-in example descriptions")
     e.add_argument("--list", action="store_true")
@@ -59,6 +64,8 @@ def main(argv=None) -> int:
             return _generate(args)
         if args.cmd == "inspect":
             spec = parse_any(args.input)
+            if getattr(args, "web", False):
+                _enrich(spec, args.input, os.getcwd())
             print(f"# detected input kind: {detect_kind(args.input)}")
             print(spec.to_json())
             issues = spec.validate()
@@ -84,8 +91,26 @@ def main(argv=None) -> int:
     return 2
 
 
+def _enrich(spec, inp: str, out_dir: str) -> None:
+    """Apply the opt-in web pass (NL inputs only)."""
+    if spec.source_kind != "natural-language":
+        print("map2arcpy: --web currently enriches natural-language inputs only "
+              f"(this is '{spec.source_kind}') — skipped", file=sys.stderr)
+        return
+    from . import web
+    text = inp
+    if os.path.exists(inp):
+        with open(inp, "r", encoding="utf-8-sig") as f:
+            text = f.read()
+    web.enrich(spec, text, out_dir)
+
+
 def _generate(args) -> int:
     spec = parse_any(args.input)
+    if args.web:
+        out_dir = (os.path.dirname(os.path.abspath(args.output))
+                   if args.output else os.getcwd())
+        _enrich(spec, args.input, out_dir)
     code = generate(spec, strict=args.strict)
     if args.spec:
         with open(args.spec, "w", encoding="utf-8") as f:

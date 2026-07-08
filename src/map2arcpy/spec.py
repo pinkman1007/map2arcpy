@@ -140,6 +140,7 @@ class MapSpec:
     layout: Layout = dataclasses.field(default_factory=Layout)
     source_kind: str = "unknown"               # which parser produced this
     notes: List[str] = dataclasses.field(default_factory=list)
+    extent: Optional[List[float]] = None       # [xmin,ymin,xmax,ymax] in WGS84
     schema_version: int = SCHEMA_VERSION
 
     # ---- validation ----
@@ -193,6 +194,7 @@ class MapSpec:
             layout=layout,
             source_kind=d.get("source_kind", "unknown"),
             notes=list(d.get("notes", [])),
+            extent=d.get("extent"),
             schema_version=int(d.get("schema_version", SCHEMA_VERSION)),
         )
 

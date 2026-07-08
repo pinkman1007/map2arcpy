@@ -116,7 +116,24 @@ outside it, the parser degrades to a scaffold with TODOs, never a guess.
 * `spatial_join`'s output field mapping is arcpy's default (all fields,
   first match); no field-map control from NL or spec yet.
 
-## 7. Process gaps
+## 7. Web pass (`--web`)
+
+* NL inputs only for now; `--web` on data/CIM inputs prints a skip notice.
+* One place per description; the FIRST capitalised "in <Place>" match wins.
+  Ambiguous names ("in Hyderabad" — India or Pakistan?) take Nominatim's
+  top hit; the matched display name is recorded in a note so you can check.
+* Overpass queries use the geocoded bbox as-is: a whole-state place name
+  can time out or return tens of thousands of features. No paging, no
+  result cap yet. Keep places city-scale.
+* OSM ways are converted to lines/polygons locally; multipolygon
+  *relations* (complex lakes, boundaries) are skipped.
+* Service etiquette is the user's responsibility at scale: Nominatim asks
+  for max 1 request/second; Overpass and AGOL have fair-use limits. The
+  tool sends one request per feature/place per run and a proper User-Agent,
+  but does not queue or throttle beyond that.
+* Downloaded GeoJSON is a snapshot; nothing tracks OSM updates.
+
+## 8. Process gaps
 
 * No PyPI release; install is from GitHub.
 * CI runs tests + a CLI smoke on 3.9/3.11/3.12 but (by nature) no ArcGIS

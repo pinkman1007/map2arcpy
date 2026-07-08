@@ -101,6 +101,7 @@ def _config_block(spec: MapSpec) -> str:
     lines.append(f"    'legend': {lay.legend!r}, 'north_arrow': {lay.north_arrow!r}, "
                  f"'scale_bar': {lay.scale_bar!r},")
     lines.append(f"    'export': {lay.export!r},")
+    lines.append(f"    'extent': {spec.extent!r},  # WGS84 [xmin, ymin, xmax, ymax] or None")
     lines.append("    'aprx_template': None,  # set to a blank .aprx when running via propy.bat")
     op_outputs = {op.output for op in spec.operations if op.output}
     lines.append("    'sources': {")
@@ -168,9 +169,15 @@ def _emit_layer_add(l: Layer, spec: MapSpec) -> List[str]:
         lines.append(f"    m.addBasemap({l.source!r})")
         return lines
     op_outputs = {op.output for op in spec.operations if op.output}
-    src = (f"os.path.join(results, {l.name!r})" if l.name in op_outputs and not l.source
-           else f"CONFIG['sources'][{l.name!r}]")
-    lines.append(f"    lyr = m.addDataFromPath({src})")
+    if l.name in op_outputs and not l.source:
+        lines.append(f"    lyr = m.addDataFromPath(os.path.join(results, {l.name!r}))")
+    elif l.kind == "vector" and l.source.lower().endswith(".geojson"):
+        geom = {"point": "POINT", "line": "POLYLINE"}.get(l.geometry or "", "POLYGON")
+        lines.append(f"    _fc = geojson_to_fc(CONFIG['sources'][{l.name!r}],")
+        lines.append(f"        os.path.join(results, {l.name!r}), {geom!r})")
+        lines.append("    lyr = m.addDataFromPath(_fc)")
+    else:
+        lines.append(f"    lyr = m.addDataFromPath(CONFIG['sources'][{l.name!r}])")
     r = l.renderer
     if r.type == "unique" and r.field:
         lines.append(f"    apply_unique(lyr, {r.field!r}, {r.color_map!r})")
@@ -249,6 +256,8 @@ def _main_block(spec: MapSpec) -> str:
     lines.extend([
         "    # ---- layout + export " + "-" * 38,
         "    layout = build_layout(aprx, m, CONFIG)",
+        "    if CONFIG.get('extent'):",
+        "        set_extent(layout, CONFIG['extent'])",
         "    out_path = CONFIG['export']",
         "    if not os.path.isabs(out_path):",
         "        out_path = os.path.join(work_dir, out_path)",

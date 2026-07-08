@@ -213,6 +213,30 @@ def _surround(layout, mf, kind, style_name, x, y):
         log("%s skipped: %s" % (kind.lower(), e), "WARN")
 
 
+def set_extent(layout, bbox4326):
+    """Zoom the layout's map frame to a WGS84 [xmin, ymin, xmax, ymax] bbox
+    (e.g. from a geocoded place). Safe no-op on failure."""
+    try:
+        w, s, e, n = bbox4326
+        sr = arcpy.SpatialReference(4326)
+        poly = arcpy.Polygon(arcpy.Array([arcpy.Point(w, s), arcpy.Point(w, n),
+                                          arcpy.Point(e, n), arcpy.Point(e, s)]), sr)
+        mf = layout.listElements("MAPFRAME_ELEMENT")[0]
+        mf.camera.setExtent(poly.extent)
+        log("map frame zoomed to bbox %s" % (bbox4326,))
+    except Exception as e:
+        log("set_extent skipped: %s" % e, "WARN")
+
+
+def geojson_to_fc(path, out_fc, geometry="POLYGON"):
+    """GeoJSON file -> feature class via JSONToFeatures (ArcGIS Pro 2.6+).
+    Pro cannot add a .geojson directly, so every GeoJSON source converts
+    into results.gdb first."""
+    arcpy.conversion.JSONToFeatures(path, out_fc, geometry)
+    log("converted %s -> %s" % (os.path.basename(str(path)), out_fc))
+    return out_fc
+
+
 def export_layout(layout, out_path, dpi=300):
     d = os.path.dirname(out_path)
     if d:
