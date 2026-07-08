@@ -9,7 +9,7 @@ description = "Rule-based AI that converts any map — a plain-English descripti
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "UDAAR" }]
+authors = [{ name = "Majji Jaideep" }]
 keywords = ["arcgis", "arcpy", "gis", "map", "code-generation", "cartography"]
 classifiers = [
     "Development Status :: 4 - Beta",

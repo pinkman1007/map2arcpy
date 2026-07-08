@@ -113,7 +113,7 @@ The whole test suite (parsers, generator, CLI) runs without ArcGIS Pro.
 
 ## License
 
-MIT © 2026 UDAAR
+MIT © 2026 Majji Jaideep
 
 *Not affiliated with or endorsed by Esri. "ArcGIS", "ArcGIS Pro" and "arcpy"
 are trademarks of Esri, referenced here only to describe interoperability.*
