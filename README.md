@@ -21,7 +21,7 @@ government workstation.
 ## Quick start
 
 ```bash
-pip install git+https://github.com/UDAAR-ARCHITECT/map2arcpy.git
+pip install git+https://github.com/pinkman1007/map2arcpy.git
 
 # from a plain-English description
 map2arcpy generate "Buffer schools.shp by 500 meters, clip to \"city_boundary.shp\", \
