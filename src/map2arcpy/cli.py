@@ -50,6 +50,9 @@ def main(argv=None) -> int:
                    help="plain-English instruction for what a DATA input should "
                         "show, e.g. \"choropleth of pop_density, clip to "
                         "boundary.shp, titled 'Density'\"")
+    g.add_argument("--systems", action="store_true",
+                   help="add systems-thinking analysis: causal drivers, "
+                        "stock/flow discipline, boundary critique, feedback loops")
     st = g.add_argument_group("style overrides (how the map should look)")
     st.add_argument("--title"), st.add_argument("--subtitle")
     st.add_argument("--ramp", help="greens|blues|reds|oranges|viridis|red_blue|brown_teal")
@@ -182,6 +185,9 @@ def _generate(args) -> int:
     if style:
         from .style import apply_style
         apply_style(spec, style)
+    if getattr(args, "systems", False):
+        from . import systems
+        systems.apply(spec, getattr(args, "depict", "") or args.input)
     profile = None
     if not getattr(args, "no_profile", False):
         from .probe import load_profile, summary

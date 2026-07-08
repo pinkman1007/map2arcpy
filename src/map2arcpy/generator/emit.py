@@ -102,6 +102,14 @@ def _header(spec: MapSpec, errors: List[str],
     else:
         lines.append("# TIP: run `map2arcpy probe` once in ArcGIS Pro so scripts are "
                      "matched to your Pro version, licenses and portal")
+    if spec.systems_context:
+        lines.append("#")
+        lines.append("# " + "=" * 66)
+        lines.append("# SYSTEMS CONTEXT  (systems-thinking layer)")
+        lines.append("# " + "=" * 66)
+        for sc in spec.systems_context:
+            lines.append("# " + _safe_text(sc))
+        lines.append("#")
     for n in spec.notes:
         lines.append(f"# NOTE: {_safe_text(n)}")
     for e in errors:

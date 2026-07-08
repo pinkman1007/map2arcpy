@@ -167,6 +167,9 @@ class _Handler(BaseHTTPRequestHandler):
         if isinstance(st, dict) and st:
             from .style import apply_style
             apply_style(spec, st)
+        if doc.get("systems"):
+            from . import systems
+            systems.apply(spec, str(depict or doc.get("input") or ""))
         return spec
 
     # -------------------------------------------------------------- handlers

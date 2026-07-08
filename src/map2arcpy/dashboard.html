@@ -81,6 +81,7 @@
       </div>
       <div class="row">
         <label class="chk"><input type="checkbox" id="web"> use web (geocode / OSM / AGOL)</label>
+        <label class="chk"><input type="checkbox" id="systems"> systems analysis (causal drivers, loops)</label>
         <label class="chk"><input type="checkbox" id="strict"> strict (fail on TODOs)</label>
       </div>
       <div class="row">
@@ -223,7 +224,8 @@ function styleObj(){
   return s;
 }
 function payload(){
-  const p = { web: $("web").checked, strict: $("strict").checked };
+  const p = { web: $("web").checked, strict: $("strict").checked,
+              systems: $("systems").checked };
   const lp = $("localpath").value.trim();
   if(lp) p.path = lp;                       // local path wins: read in place
   else if(fileData) p.file = fileData;
