@@ -1,6 +1,10 @@
-# map2arcpy
+# map2arcpy · *evening the odds*
 
 **Turn any map into an executable ArcGIS Pro Python script.**
+
+> **New here? → [INSTALL.md](INSTALL.md) is a plain-English, click-by-click
+> setup guide that assumes no coding background.** The rest of this README is
+> the reference.
 
 `map2arcpy` is a deterministic, rule-based converter ("compiler", if you
 like): give it a map in almost any form and it emits a standalone,
