@@ -22,11 +22,10 @@ Security posture (deliberate, documented):
 from __future__ import annotations
 
 import base64
+import datetime
 import json
 import os
 import re
-import shutil
-import tempfile
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -190,13 +189,20 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def serve(host: str = "127.0.0.1", port: int = DEFAULT_PORT,
-          web: bool = False, open_browser: bool = True) -> None:
-    upload_dir = tempfile.mkdtemp(prefix="map2arcpy_uploads_")
+          web: bool = False, open_browser: bool = True,
+          data_dir: Optional[str] = None) -> None:
+    # Uploads must OUTLIVE the server: generated scripts reference these
+    # paths (zip extractions especially), so a temp dir that vanishes on
+    # exit would break every script the moment the server stops.
+    base = data_dir or os.path.join(os.path.expanduser("~"), "map2arcpy_data")
+    upload_dir = os.path.join(base, datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S"))
+    os.makedirs(upload_dir, exist_ok=True)
     _Handler.web_enabled = web
     _Handler.upload_dir = upload_dir
     httpd = ThreadingHTTPServer((host, port), _Handler)
     url = f"http://{host}:{httpd.server_address[1]}/"
     print(f"map2arcpy dashboard -> {url}")
+    print(f"uploaded data kept in: {upload_dir}")
     print(f"web enrichment: {'ENABLED' if web else 'off (start with --web to enable)'}")
     print("Ctrl+C to stop.")
     if open_browser:
@@ -207,4 +213,10 @@ def serve(host: str = "127.0.0.1", port: int = DEFAULT_PORT,
         print("\nstopping...")
     finally:
         httpd.server_close()
-        shutil.rmtree(upload_dir, ignore_errors=True)
+        try:                                    # remove only if nothing was uploaded
+            if not os.listdir(upload_dir):
+                os.rmdir(upload_dir)
+        except OSError:
+            pass
+        print(f"your uploaded data stays in {upload_dir} — generated scripts "
+              "reference it; delete old run_* folders there when done")
