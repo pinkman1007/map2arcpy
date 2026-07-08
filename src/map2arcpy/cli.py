@@ -54,6 +54,15 @@ def main(argv=None) -> int:
     e.add_argument("--list", action="store_true")
     e.add_argument("--run", metavar="NAME", help="generate a script from a named example")
 
+    s = sub.add_parser("serve", help="run the local API + web dashboard")
+    s.add_argument("--host", default="127.0.0.1",
+                   help="bind address (default 127.0.0.1 — no auth, keep it local)")
+    s.add_argument("--port", type=int, default=8760)
+    s.add_argument("--web", action="store_true",
+                   help="allow web enrichment for requests that ask for it")
+    s.add_argument("--no-browser", action="store_true",
+                   help="don't auto-open the dashboard in a browser")
+
     args = ap.parse_args(argv)
     if not args.cmd:
         ap.print_help()
@@ -74,6 +83,11 @@ def main(argv=None) -> int:
                       file=sys.stderr)
                 for x in issues:
                     print(f"#  - {x}", file=sys.stderr)
+            return 0
+        if args.cmd == "serve":
+            from .server import serve
+            serve(host=args.host, port=args.port, web=args.web,
+                  open_browser=not args.no_browser)
             return 0
         if args.cmd == "examples":
             if args.run:

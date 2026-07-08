@@ -76,7 +76,25 @@ page size — sits in one `CONFIG` dict at the top of the script.
 map2arcpy generate <input> [-o script.py] [--spec spec.json] [--strict] [--web]
 map2arcpy inspect  <input> [--web]  # show the intermediate MapSpec JSON
 map2arcpy examples [--list|--run NAME]
+map2arcpy serve    [--port 8760] [--web] [--no-browser]   # web dashboard + API
 ```
+
+## Web dashboard (`map2arcpy serve`)
+
+`map2arcpy serve` starts a local API server (pure stdlib — still zero
+dependencies) and opens a browser dashboard: type a description or attach a
+.lyrx/.mapx/.aprx/.geojson/image, click **Generate**, and read, copy or
+download the arcpy script; the **MapSpec** and **Notes & TODOs** tabs show
+what the parser understood and what it couldn't. Start it with `--web` to
+enable the geocode/OSM/AGOL enrichment as a checkbox in the UI.
+
+JSON API, if you'd rather script it: `GET /health`, `GET /api/examples`,
+`POST /api/inspect` and `POST /api/generate` with
+`{"input": "...", "web": false, "strict": false}` or
+`{"file": {"name": "x.lyrx", "content_b64": "..."}}`.
+
+The server binds `127.0.0.1` and has **no authentication** — it's a personal
+tool UI. Don't expose it beyond localhost without putting a proxy in front.
 
 `--spec` writes the intermediate representation next to the script; edit it
 by hand and feed it back to `generate` for full control between "what the

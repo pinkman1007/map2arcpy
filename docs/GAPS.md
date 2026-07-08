@@ -133,7 +133,20 @@ outside it, the parser degrades to a scaffold with TODOs, never a guess.
   but does not queue or throttle beyond that.
 * Downloaded GeoJSON is a snapshot; nothing tracks OSM updates.
 
-## 8. Process gaps
+## 8. Server / dashboard (`map2arcpy serve`)
+
+* **No auth, localhost by design.** `--host 0.0.0.0` works but exposes an
+  unauthenticated code generator to the network — front it with a reverse
+  proxy if you must share it.
+* Uploads are limited to whitelisted extensions and 64 MB bodies; a
+  shapefile upload needs its .dbf/.prj sidecars uploaded separately (or
+  just use the CLI for shapefiles — the browser can't send a folder).
+* Generated scripts are returned, never executed — the server has no arcpy
+  and runs nothing it produces.
+* Single-process stdlib `http.server`; fine for one user, not engineered
+  for concurrency or long uptimes.
+
+## 9. Process gaps
 
 * No PyPI release; install is from GitHub.
 * CI runs tests + a CLI smoke on 3.9/3.11/3.12 but (by nature) no ArcGIS

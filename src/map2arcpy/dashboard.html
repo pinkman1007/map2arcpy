@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>map2arcpy — dashboard</title>
+<style>
+  :root{
+    --bg:#0f1a1e; --panel:#152329; --panel2:#1b2d35; --line:#25404b;
+    --teal:#4c9aa8; --teal-bright:#6fc3d2; --text:#dbe7ea; --dim:#8aa3ab;
+    --ok:#4caf7d; --warn:#e0b64f; --err:#e06c5f; --mono:ui-monospace,Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  header{display:flex;align-items:center;gap:14px;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:18px;margin:0;letter-spacing:.4px}
+  header h1 b{color:var(--teal-bright)}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--err);transition:background .3s}
+  .dot.ok{background:var(--ok)}
+  #status{color:var(--dim);font-size:13px}
+  main{display:grid;grid-template-columns:minmax(340px,480px) 1fr;gap:18px;padding:18px 22px;max-width:1500px;margin:0 auto}
+  @media (max-width:980px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--teal-bright)}
+  textarea{width:100%;min-height:130px;resize:vertical;background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:8px;padding:10px;font:14px/1.5 var(--mono)}
+  textarea:focus{outline:1px solid var(--teal)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  button{background:var(--teal);color:#08181d;border:0;border-radius:8px;padding:9px 16px;
+    font-weight:600;cursor:pointer;font-size:14px}
+  button:hover{background:var(--teal-bright)}
+  button.ghost{background:transparent;color:var(--teal-bright);border:1px solid var(--line)}
+  button:disabled{opacity:.45;cursor:wait}
+  label.chk{display:flex;gap:6px;align-items:center;color:var(--dim);font-size:13px;cursor:pointer}
+  .examples button{font-size:12.5px;padding:5px 10px;margin:3px 4px 0 0}
+  .filebox{border:1px dashed var(--line);border-radius:8px;padding:10px;margin-top:10px;color:var(--dim);font-size:13px}
+  .filebox input{display:none}
+  .filebox b{color:var(--text)}
+  .tabs{display:flex;gap:4px;margin-bottom:10px}
+  .tabs button{background:transparent;border:1px solid var(--line);color:var(--dim);padding:6px 14px;font-size:13px}
+  .tabs button.active{background:var(--panel2);color:var(--teal-bright);border-color:var(--teal)}
+  pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;
+    overflow:auto;max-height:62vh;font:13px/1.5 var(--mono);white-space:pre;margin:0}
+  .notes li{margin:4px 0;font-size:13.5px}
+  .notes .warn{color:var(--warn)} .notes .err{color:var(--err)} .notes .info{color:var(--dim)}
+  .pill{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:20px;
+    padding:2px 11px;font-size:12px;color:var(--dim);margin-left:8px}
+  #msg{font-size:13px;color:var(--warn);min-height:18px;margin-top:8px}
+  footer{padding:10px 22px 24px;color:var(--dim);font-size:12px;text-align:center}
+  a{color:var(--teal-bright)}
+</style>
+</head>
+<body>
+<header>
+  <div class="dot" id="dot"></div>
+  <h1><b>map2arcpy</b> dashboard</h1>
+  <span id="status">connecting…</span>
+</header>
+
+<main>
+  <section>
+    <div class="card">
+      <h2>1 · Describe or upload a map</h2>
+      <textarea id="input" placeholder="e.g.  Buffer schools.shp by 500 meters, clip to &quot;city_boundary.shp&quot;, UTM zone 44N, titled 'School Walkability', A3 landscape&#10;&#10;or with --web:  hospitals from osm in Visakhapatnam, titled 'Health Access'"></textarea>
+      <div class="filebox" id="drop">
+        <label>
+          <input type="file" id="file" accept=".aprx,.lyrx,.mapx,.geojson,.json,.txt,.tif,.tiff,.png,.jpg,.jpeg,.pdf,.shp">
+          📁 <b>Click to attach a file</b> (.lyrx · .mapx · .aprx · .geojson · .json · image · pdf) — or just type above
+        </label>
+        <div id="fname"></div>
+      </div>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="web"> use web (geocode / OSM / AGOL)</label>
+        <label class="chk"><input type="checkbox" id="strict"> strict (fail on TODOs)</label>
+      </div>
+      <div class="row">
+        <button id="btnGen">Generate script</button>
+        <button id="btnInspect" class="ghost">Inspect spec</button>
+        <button id="btnClear" class="ghost">Clear</button>
+      </div>
+      <div id="msg"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>Examples</h2>
+      <div class="examples" id="examples"><span style="color:var(--dim);font-size:13px">loading…</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2 · Result <span class="pill" id="meta"></span></h2>
+    <div class="tabs">
+      <button data-tab="script" class="active">Script</button>
+      <button data-tab="spec">MapSpec</button>
+      <button data-tab="notes">Notes &amp; TODOs</button>
+    </div>
+    <div id="tab-script">
+      <div class="row" style="margin:0 0 10px">
+        <button id="btnCopy" class="ghost" disabled>Copy</button>
+        <button id="btnDl" class="ghost" disabled>Download .py</button>
+        <span style="color:var(--dim);font-size:12.5px">run inside ArcGIS Pro (Python window / notebook / propy.bat)</span>
+      </div>
+      <pre id="script"># your generated arcpy script appears here</pre>
+    </div>
+    <div id="tab-spec" hidden><pre id="spec"># the intermediate MapSpec JSON appears here</pre></div>
+    <div id="tab-notes" hidden><ul class="notes" id="notes"><li class="info">nothing yet</li></ul></div>
+  </section>
+</main>
+
+<footer>map2arcpy — offline by default; web calls only when the server runs with <code>--web</code> and the box above is ticked.
+Not affiliated with Esri.</footer>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let lastScript = "", lastName = "map_script.py", fileData = null;
+
+// ---- health -----------------------------------------------------------
+async function health(){
+  try{
+    const r = await fetch("/health"); const j = await r.json();
+    $("dot").classList.add("ok");
+    $("status").textContent = `v${j.version} · web ${j.web_enabled ? "enabled" : "off (restart with --web)"}`;
+    if(!j.web_enabled){ $("web").disabled = true; $("web").parentElement.style.opacity = .5; }
+  }catch(e){
+    $("dot").classList.remove("ok");
+    $("status").textContent = "server unreachable — is `map2arcpy serve` running?";
+  }
+}
+health(); setInterval(health, 5000);
+
+// ---- examples ----------------------------------------------------------
+fetch("/api/examples").then(r=>r.json()).then(ex=>{
+  const box = $("examples"); box.innerHTML = "";
+  for(const [k,v] of Object.entries(ex)){
+    const b = document.createElement("button"); b.className="ghost"; b.textContent = k;
+    b.title = v; b.onclick = () => { $("input").value = v; clearFile(); };
+    box.appendChild(b);
+  }
+}).catch(()=>{ $("examples").textContent = "unavailable"; });
+
+// ---- file attach --------------------------------------------------------
+$("file").addEventListener("change", () => {
+  const f = $("file").files[0];
+  if(!f) return clearFile();
+  const rd = new FileReader();
+  rd.onload = () => {
+    fileData = { name: f.name, content_b64: rd.result.split(",",2)[1] };
+    $("fname").innerHTML = `attached: <b>${f.name}</b> (${(f.size/1024).toFixed(0)} KB) — this overrides the text box`;
+  };
+  rd.readAsDataURL(f);
+});
+function clearFile(){ fileData = null; $("file").value = ""; $("fname").textContent = ""; }
+
+// ---- tabs ---------------------------------------------------------------
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  for(const t of ["script","spec","notes"]) $("tab-"+t).hidden = (t !== b.dataset.tab);
+});
+
+// ---- actions --------------------------------------------------------------
+function payload(){
+  const p = { web: $("web").checked, strict: $("strict").checked };
+  if(fileData) p.file = fileData; else p.input = $("input").value.trim();
+  return p;
+}
+function showNotes(spec, issues){
+  const ul = $("notes"); ul.innerHTML = "";
+  (spec.notes||[]).forEach(n => ul.insertAdjacentHTML("beforeend",
+      `<li class="${n.startsWith("web:")?"info":"warn"}">${esc(n)}</li>`));
+  (spec.layers||[]).forEach(l => (l.notes||[]).forEach(n =>
+      ul.insertAdjacentHTML("beforeend", `<li class="warn">[${esc(l.name)}] ${esc(n)}</li>`)));
+  (issues||[]).forEach(i => ul.insertAdjacentHTML("beforeend", `<li class="err">issue: ${esc(i)}</li>`));
+  if(!ul.children.length) ul.innerHTML = '<li class="info">clean — no notes, no TODOs</li>';
+}
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function call(path, btn){
+  const p = payload();
+  if(!p.file && !p.input){ $("msg").textContent = "type a description or attach a file first"; return; }
+  $("msg").textContent = ""; btn.disabled = true; btn.textContent = "working…";
+  try{
+    const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"},
+                                 body: JSON.stringify(p)});
+    const j = await r.json();
+    if(!r.ok){ $("msg").textContent = j.error || ("HTTP " + r.status); return; }
+    $("spec").textContent = JSON.stringify(j.spec, null, 2);
+    showNotes(j.spec, j.issues);
+    if(j.script !== undefined){
+      lastScript = j.script; lastName = j.filename || "map_script.py";
+      $("script").textContent = j.script;
+      $("btnCopy").disabled = $("btnDl").disabled = false;
+      $("meta").textContent = `${j.script.split("\n").length} lines · ${j.todos} TODOs · ${lastName}`;
+    }else{
+      $("meta").textContent = `spec: ${(j.spec.layers||[]).length} layers · ${(j.spec.operations||[]).length} ops · EPSG:${j.spec.crs_epsg}`;
+      document.querySelector('[data-tab="spec"]').click();
+    }
+  }catch(e){ $("msg").textContent = "request failed: " + e; }
+  finally{ btn.disabled = false; btn.textContent = btn === $("btnGen") ? "Generate script" : "Inspect spec"; }
+}
+$("btnGen").onclick = () => call("/api/generate", $("btnGen"));
+$("btnInspect").onclick = () => call("/api/inspect", $("btnInspect"));
+$("btnClear").onclick = () => { $("input").value = ""; clearFile(); $("msg").textContent = ""; };
+$("btnCopy").onclick = async () => { await navigator.clipboard.writeText(lastScript); $("msg").textContent = "copied ✓"; };
+$("btnDl").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lastScript], {type:"text/x-python"}));
+  a.download = lastName; a.click(); URL.revokeObjectURL(a.href);
+};
+</script>
+</body>
+</html>
