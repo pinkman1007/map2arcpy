@@ -35,6 +35,9 @@
   .examples button{font-size:12.5px;padding:5px 10px;margin:3px 4px 0 0}
   .filebox{border:1px dashed var(--line);border-radius:8px;padding:10px;margin-top:10px;color:var(--dim);font-size:13px}
   .filebox input[type=file]{display:none}
+  .stin{display:block;width:100%;margin-top:4px;background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:13px var(--mono)}
+  label{color:var(--dim)}
   .filebox b{color:var(--text)}
   .tabs{display:flex;gap:4px;margin-bottom:10px}
   .tabs button{background:transparent;border:1px solid var(--line);color:var(--dim);padding:6px 14px;font-size:13px}
@@ -89,13 +92,43 @@
     </div>
 
     <div class="card" style="margin-top:18px">
+      <h2>2 · Style — how should it look? (optional)</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
+        <label>Title<input type="text" id="st_title" placeholder="(auto)" class="stin"></label>
+        <label>Subtitle<input type="text" id="st_subtitle" placeholder="(auto)" class="stin"></label>
+        <label>Colour ramp<select id="st_ramp" class="stin">
+          <option value="auto">auto</option><option>greens</option><option>blues</option>
+          <option>reds</option><option>oranges</option><option>viridis</option>
+          <option>red_blue</option><option>brown_teal</option></select></label>
+        <label>Single colour<input type="text" id="st_color" placeholder="#RRGGBB (auto)" class="stin"></label>
+        <label>Basemap<select id="st_basemap" class="stin">
+          <option value="auto">auto</option><option value="none">none</option>
+          <option>Imagery</option><option>Topographic</option><option>Streets</option>
+          <option>OpenStreetMap</option><option>Dark Gray Canvas</option>
+          <option>Light Gray Canvas</option><option>Terrain with Labels</option></select></label>
+        <label>Page<select id="st_page" class="stin">
+          <option value="auto">auto</option><option>A4P</option><option>A4L</option>
+          <option>A3P</option><option>A3L</option><option>LetterP</option><option>LetterL</option></select></label>
+        <label>Export as<select id="st_format" class="stin">
+          <option value="auto">auto</option><option>pdf</option><option>png</option><option>jpg</option></select></label>
+        <label>DPI<input type="number" id="st_dpi" placeholder="300" min="72" max="1200" class="stin"></label>
+        <label>Legend<select id="st_legend" class="stin">
+          <option value="auto">auto</option><option value="on">on</option><option value="off">off</option></select></label>
+        <label>North arrow<select id="st_north_arrow" class="stin">
+          <option value="auto">auto</option><option value="on">on</option><option value="off">off</option></select></label>
+        <label>Scale bar<select id="st_scale_bar" class="stin">
+          <option value="auto">auto</option><option value="on">on</option><option value="off">off</option></select></label>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
       <h2>Examples</h2>
       <div class="examples" id="examples"><span style="color:var(--dim);font-size:13px">loading…</span></div>
     </div>
   </section>
 
   <section class="card">
-    <h2>2 · Result <span class="pill" id="meta"></span></h2>
+    <h2>3 · Result <span class="pill" id="meta"></span></h2>
     <div class="tabs">
       <button data-tab="script" class="active">Script</button>
       <button data-tab="spec">MapSpec (info)</button>
@@ -175,12 +208,28 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
 });
 
 // ---- actions --------------------------------------------------------------
+function styleObj(){
+  const s = {};
+  if($("st_title").value.trim()) s.title = $("st_title").value.trim();
+  if($("st_subtitle").value.trim()) s.subtitle = $("st_subtitle").value.trim();
+  if($("st_ramp").value !== "auto") s.ramp = $("st_ramp").value;
+  if($("st_color").value.trim()) s.color = $("st_color").value.trim();
+  if($("st_basemap").value !== "auto") s.basemap = $("st_basemap").value;
+  if($("st_page").value !== "auto") s.page = $("st_page").value;
+  if($("st_format").value !== "auto") s.format = $("st_format").value;
+  if($("st_dpi").value) s.dpi = parseInt($("st_dpi").value, 10);
+  for(const k of ["legend","north_arrow","scale_bar"])
+    if($("st_"+k).value !== "auto") s[k] = ($("st_"+k).value === "on");
+  return s;
+}
 function payload(){
   const p = { web: $("web").checked, strict: $("strict").checked };
   const lp = $("localpath").value.trim();
   if(lp) p.path = lp;                       // local path wins: read in place
   else if(fileData) p.file = fileData;
   else p.input = $("input").value.trim();
+  const st = styleObj();
+  if(Object.keys(st).length) p.style = st;
   return p;
 }
 function showNotes(spec, issues){

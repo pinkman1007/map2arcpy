@@ -154,6 +154,10 @@ class _Handler(BaseHTTPRequestHandler):
                     with open(inp, "r", encoding="utf-8-sig", errors="ignore") as fh:
                         text = fh.read()
                 web.enrich(spec, text, self.upload_dir)
+        st = doc.get("style")
+        if isinstance(st, dict) and st:
+            from .style import apply_style
+            apply_style(spec, st)
         return spec
 
     # -------------------------------------------------------------- handlers

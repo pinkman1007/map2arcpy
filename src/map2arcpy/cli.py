@@ -46,6 +46,15 @@ def main(argv=None) -> int:
                         "OSM features (Overpass), find ArcGIS Online layers")
     g.add_argument("--no-profile", action="store_true",
                    help="ignore the saved ArcGIS Pro profile (map2arcpy probe)")
+    st = g.add_argument_group("style overrides (how the map should look)")
+    st.add_argument("--title"), st.add_argument("--subtitle")
+    st.add_argument("--ramp", help="greens|blues|reds|oranges|viridis|red_blue|brown_teal")
+    st.add_argument("--color", help="#RRGGBB for simple-rendered layers")
+    st.add_argument("--basemap", help="Imagery|Topographic|Streets|OpenStreetMap|"
+                                      "'Dark Gray Canvas'|'Light Gray Canvas'|none")
+    st.add_argument("--page", help="A4P|A4L|A3P|A3L|LetterP|LetterL")
+    st.add_argument("--dpi", type=int)
+    st.add_argument("--format", dest="fmt", help="pdf|png|jpg")
 
     i = sub.add_parser("inspect", help="show the MapSpec a given input produces")
     i.add_argument("input")
@@ -159,6 +168,13 @@ def _generate(args) -> int:
         out_dir = (os.path.dirname(os.path.abspath(args.output))
                    if args.output else os.getcwd())
         _enrich(spec, args.input, out_dir)
+    style = {k: v for k, v in {
+        "title": args.title, "subtitle": args.subtitle, "ramp": args.ramp,
+        "color": args.color, "basemap": args.basemap, "page": args.page,
+        "dpi": args.dpi, "format": args.fmt}.items() if v}
+    if style:
+        from .style import apply_style
+        apply_style(spec, style)
     profile = None
     if not getattr(args, "no_profile", False):
         from .probe import load_profile, summary
