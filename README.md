@@ -90,7 +90,7 @@ Out of the box the generator is blind to the Pro it targets. The probe
 fixes that in one minute: `map2arcpy probe` writes a tiny read-only script;
 run it once inside ArcGIS Pro (Python window or notebook) and it saves a
 machine profile — Pro version, license level, available extensions, portal
-sign-in, the open project — to `~/map2arcpy_data/pro_profile.json`.
+sign-in, the open project, the FULL toolbox/tool inventory (every toolbox, up to 2000 tool names, plus a ground-truth check of the exact tools map2arcpy emits), CPU count and geoprocessing environment, and Pro's Python libraries — to `~/map2arcpy_data/pro_profile.json`.
 
 Every generation (CLI, API and dashboard) then adapts automatically:
 classic `Buffer`/`Clip` instead of `Pairwise*` on Pro older than 2.7,

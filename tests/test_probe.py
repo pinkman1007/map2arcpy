@@ -108,3 +108,34 @@ def test_generate_cli_uses_profile(tmp_path, monkeypatch, capsys):
     assert main(["generate", "buffer wells.shp by 100 m, epsg 32644",
                  "-o", str(out), "--no-profile"]) == 0
     assert "PairwiseBuffer" in out.read_text()
+
+
+def test_tool_inventory_beats_version_heuristic(tmp_path, monkeypatch):
+    # Pro 3.3 but Pairwise genuinely missing -> classic tools anyway
+    prof = _fake_profile(tmp_path, monkeypatch,
+                         tools={"analysis.PairwiseBuffer": False,
+                                "analysis.Buffer": True})
+    assert probe.use_classic_tools(prof) is True
+    # Pro 2.6 but inventory says Pairwise IS there -> pairwise wins
+    prof2 = _fake_profile(tmp_path, monkeypatch, pro_version="2.6.0",
+                          tools={"analysis.PairwiseBuffer": True})
+    assert probe.use_classic_tools(prof2) is False
+    assert probe.tool_available(prof2, "analysis.PairwiseBuffer") is True
+    assert probe.tool_available(prof2, "md.MakeNetCDFRasterLayer") is None
+
+
+def test_probe_script_inventories_everything():
+    src = probe.probe_script()
+    ast.parse(src)
+    for marker in ("ListToolboxes", "ListTools", "PairwiseBuffer",
+                   "MakeNetCDFRasterLayer", "parallelProcessingFactor",
+                   "cpu_count", "python_libs"):
+        assert marker in src
+
+
+def test_summary_includes_toolboxes(tmp_path, monkeypatch):
+    prof = _fake_profile(tmp_path, monkeypatch,
+                         toolboxes=["Analysis Tools(analysis)"] * 12,
+                         tool_count=1543)
+    s = probe.summary(prof)
+    assert "12 toolboxes" in s and "1543 tools" in s

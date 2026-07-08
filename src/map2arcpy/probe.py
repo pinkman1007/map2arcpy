@@ -58,9 +58,24 @@ def pro_version(profile: Optional[Dict[str, Any]]) -> Optional[Tuple[int, int]]:
 
 
 def use_classic_tools(profile: Optional[Dict[str, Any]]) -> bool:
-    """Pairwise* geoprocessing arrived in Pro 2.7 — fall back before that."""
+    """Classic Buffer/Clip/… instead of Pairwise*.
+
+    Ground truth first: if the probe recorded the actual tool inventory,
+    trust it. Only fall back to the version heuristic (Pairwise arrived in
+    Pro 2.7) for older profiles without an inventory."""
+    tools = (profile or {}).get("tools")
+    if isinstance(tools, dict) and "analysis.PairwiseBuffer" in tools:
+        return not tools["analysis.PairwiseBuffer"]
     v = pro_version(profile)
     return bool(v and (v[0] < 2 or (v[0] == 2 and v[1] < 7)))
+
+
+def tool_available(profile: Optional[Dict[str, Any]], name: str) -> Optional[bool]:
+    """True/False from the probed inventory, None when unknown."""
+    tools = (profile or {}).get("tools")
+    if isinstance(tools, dict) and name in tools:
+        return bool(tools[name])
+    return None
 
 
 def summary(profile: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -69,10 +84,14 @@ def summary(profile: Optional[Dict[str, Any]]) -> Optional[str]:
     exts = [k for k, v in (profile.get("extensions") or {}).items() if v]
     portal = "portal signed in" if profile.get("portal_signed_in") else "no portal"
     proj = (profile.get("project") or {}).get("path")
+    ntbx = len(profile.get("toolboxes") or [])
+    ntools = profile.get("tool_count")
     bits = [f"ArcGIS Pro {profile.get('pro_version')}",
             str(profile.get("license") or "").strip() or None,
             portal,
             f"{len(exts)} extensions" if exts else "no extensions",
+            f"{ntbx} toolboxes" if ntbx else None,
+            f"{ntools} tools" if ntools else None,
             os.path.basename(proj) if proj else None]
     return " · ".join(b for b in bits if b)
 
@@ -141,12 +160,66 @@ try:
     profile["project"] = {
         "path": aprx.filePath,
         "default_gdb": aprx.defaultGeodatabase,
+        "home_folder": getattr(aprx, "homeFolder", None),
         "maps": [{"name": m.name,
                   "layers": [l.name for l in m.listLayers()][:50]}
                  for m in aprx.listMaps()[:10]],
+        "layouts": [l.name for l in aprx.listLayouts()][:20],
     }
 except Exception:
     profile["project"] = None       # fine: probably running via propy.bat
+
+# --- full toolbox + tool inventory (this is what makes generation smart) ---
+print("inventorying toolboxes and tools (a few seconds)...")
+try:
+    profile["toolboxes"] = list(arcpy.ListToolboxes() or [])[:200]
+except Exception:
+    profile["toolboxes"] = []
+try:
+    _all_tools = list(arcpy.ListTools() or [])
+    profile["tool_count"] = len(_all_tools)
+    profile["all_tools"] = _all_tools[:2000]        # full inventory, sane cap
+except Exception:
+    profile["tool_count"] = None
+    profile["all_tools"] = []
+
+# ground truth for the exact tools map2arcpy emits — beats version guessing
+_CHECK = {
+    "analysis":   ["PairwiseBuffer", "Buffer", "PairwiseClip", "Clip",
+                   "PairwiseDissolve", "PairwiseIntersect", "Intersect",
+                   "PairwiseErase", "Erase", "Union", "SpatialJoin",
+                   "Select", "Near"],
+    "management": ["Dissolve", "Merge", "Project", "XYTableToPoint",
+                   "CopyRaster"],
+    "conversion": ["JSONToFeatures", "GPXtoFeatures", "KMLToLayer",
+                   "TableToExcel"],
+    "md":         ["MakeNetCDFRasterLayer"],
+}
+tools = {}
+for _mod, _names in _CHECK.items():
+    _m = getattr(arcpy, _mod, None)
+    for _n in _names:
+        tools[_mod + "." + _n] = bool(_m is not None and hasattr(_m, _n))
+profile["tools"] = tools
+
+# --- performance / environment facts ---------------------------------------
+env = {"cpu_count": os.cpu_count()}
+for _k in ("parallelProcessingFactor", "overwriteOutput", "workspace",
+           "scratchWorkspace", "scratchGDB", "scratchFolder"):
+    try:
+        env[_k] = str(getattr(arcpy.env, _k))
+    except Exception:
+        env[_k] = None
+profile["environment"] = env
+
+# helpful optional libraries in Pro's Python
+libs = {}
+for _lib in ("numpy", "pandas", "arcgis"):
+    try:
+        libs[_lib] = __import__(_lib).__version__
+    except Exception:
+        libs[_lib] = None
+profile["python_libs"] = libs
 
 out = __OUT_PATH__
 os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -159,6 +232,11 @@ print("  Pro " + str(profile["pro_version"]) + "  (" + str(profile["license"]) +
 print("  portal signed in: " + str(profile["portal_signed_in"]))
 print("  extensions available: " +
       (", ".join(k for k, v in exts.items() if v) or "none"))
+print("  toolboxes: " + str(len(profile["toolboxes"])) +
+      "  |  tools inventoried: " + str(profile.get("tool_count")))
+_missing = [k for k, v in profile["tools"].items() if not v]
+print("  map2arcpy tool check: " +
+      ("all present" if not _missing else "MISSING: " + ", ".join(_missing)))
 if profile["project"]:
     print("  project: " + str(profile["project"]["path"]))
 print("map2arcpy will now generate scripts matched to this machine.")
