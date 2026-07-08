@@ -154,6 +154,15 @@ class _Handler(BaseHTTPRequestHandler):
                     with open(inp, "r", encoding="utf-8-sig", errors="ignore") as fh:
                         text = fh.read()
                 web.enrich(spec, text, self.upload_dir)
+        # depict instruction: plain-English intent riding along with a data
+        # input ("choropleth of pop_density, clip to boundary, titled ...")
+        depict = doc.get("depict")
+        if not depict and (doc.get("path") or doc.get("file")):
+            depict = doc.get("input")              # text box + file = intent
+        if isinstance(depict, str) and depict.strip() \
+                and spec.source_kind != "natural-language":
+            from .intent import apply_intent
+            apply_intent(spec, depict)
         st = doc.get("style")
         if isinstance(st, dict) and st:
             from .style import apply_style

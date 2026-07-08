@@ -46,6 +46,10 @@ def main(argv=None) -> int:
                         "OSM features (Overpass), find ArcGIS Online layers")
     g.add_argument("--no-profile", action="store_true",
                    help="ignore the saved ArcGIS Pro profile (map2arcpy probe)")
+    g.add_argument("--depict", metavar="TEXT",
+                   help="plain-English instruction for what a DATA input should "
+                        "show, e.g. \"choropleth of pop_density, clip to "
+                        "boundary.shp, titled 'Density'\"")
     st = g.add_argument_group("style overrides (how the map should look)")
     st.add_argument("--title"), st.add_argument("--subtitle")
     st.add_argument("--ramp", help="greens|blues|reds|oranges|viridis|red_blue|brown_teal")
@@ -168,6 +172,9 @@ def _generate(args) -> int:
         out_dir = (os.path.dirname(os.path.abspath(args.output))
                    if args.output else os.getcwd())
         _enrich(spec, args.input, out_dir)
+    if getattr(args, "depict", None) and spec.source_kind != "natural-language":
+        from .intent import apply_intent
+        apply_intent(spec, args.depict)
     style = {k: v for k, v in {
         "title": args.title, "subtitle": args.subtitle, "ramp": args.ramp,
         "color": args.color, "basemap": args.basemap, "page": args.page,
