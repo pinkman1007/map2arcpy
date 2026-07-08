@@ -57,3 +57,39 @@ def test_gdb_feature_class_path():
     final = [l for l in spec.layers if l.kind != "basemap"][-1]
     assert final.renderer.type == "unique"
     assert final.renderer.field == "LU_CLASS"
+
+
+def test_buffer_then_dissolve_by_field_stays_separate():
+    spec = nl.parse("buffer roads.shp by 500 m and dissolve by ward, epsg 32644")
+    tools = [(o.tool, o.inputs) for o in spec.operations]
+    assert tools == [("buffer", ["roads"]), ("dissolve", ["buffered"])]
+    assert spec.operations[0].params["dissolve"] == "NONE"
+    assert spec.operations[1].params["field"] == "ward"
+
+
+def test_bare_dissolve_folds_into_buffer():
+    spec = nl.parse("buffer roads.shp by 500 m, dissolved, epsg 32644")
+    assert [o.tool for o in spec.operations] == ["buffer"]
+    assert spec.operations[0].params["dissolve"] == "ALL"
+
+
+def test_where_clause_survives_commas_and_quotes():
+    spec = nl.parse("from sites.shp select where \"type IN ('A', 'B') AND ward = 3\"")
+    sel = next(o for o in spec.operations if o.tool == "select")
+    assert sel.params["where"] == "type IN ('A', 'B') AND ward = 3"
+
+
+def test_without_surrounds():
+    spec = nl.parse("map of parks.shp without a legend, no scale bar and without the north arrow")
+    assert spec.layout.legend is False
+    assert spec.layout.north_arrow is False
+    assert spec.layout.scale_bar is False
+
+
+def test_erase_and_intersect_ops():
+    s1 = nl.parse("erase wetlands.shp from parcels.shp, epsg 32644")
+    op = next(o for o in s1.operations if o.tool == "erase")
+    assert op.inputs == ["parcels", "wetlands"]      # Erase(in, erase_features)
+    s2 = nl.parse("intersect parks.shp with wards.shp, epsg 32644")
+    assert any(o.tool == "intersect" and o.inputs == ["parks", "wards"]
+               for o in s2.operations)

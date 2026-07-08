@@ -57,10 +57,15 @@ _UNIQ_RE = re.compile(
     re.I,
 )
 _LABEL_RE = re.compile(r"\blabel(?:led|ed)?\s+(?:by|with|using)\s+([A-Za-z_][\w]{0,40})", re.I)
+# where-clause: quoted forms win (commas/quotes inside SQL survive), then bare
+_WHERE_DQ_RE = re.compile(r"\b(?:select|filter)\s+(?:features\s+)?where\s+\"(.+)\"", re.I)
+_WHERE_SQ_RE = re.compile(r"\b(?:select|filter)\s+(?:features\s+)?where\s+'(.+)'", re.I)
 _WHERE_RE = re.compile(r"\b(?:select|filter)\s+(?:features\s+)?where\s+(.+?)(?:[,.;]|$)", re.I)
 _DISSOLVE_RE = re.compile(r"\bdissolve[d]?\s+(?:by|on)\s+([A-Za-z_][\w]{0,40})", re.I)
 _BUFFER_RE = re.compile(r"\bbuffer(?:ed|ing)?\b", re.I)
 _CLIP_RE = re.compile(r"\bclip(?:ped|ping)?\s+(?:it\s+|them\s+)?to\s+", re.I)
+_ERASE_RE = re.compile(r"\berase\s+(.+?)\s+from\s+(.+?)(?:[,.;]|$)", re.I)
+_NO_SURROUND_RE = r"\b(?:no|without(?:\s+(?:a|the|any))?)\s+%s\b"
 
 
 def parse(text: str, name_hint: str = "described map") -> MapSpec:
@@ -83,40 +88,64 @@ def parse(text: str, name_hint: str = "described map") -> MapSpec:
     if bm:
         spec.layers.insert(0, Layer(name="basemap", source=bm, kind="basemap"))
 
-    # ---- operations --------------------------------------------------------
+    # ---- operations (chained: each step consumes the previous output) ------
     first = next((l.name for l in spec.layers if l.kind != "basemap"), None)
+    current = first or "INPUT"                 # head of the processing chain
+    diss = _DISSOLVE_RE.search(t)
     if _BUFFER_RE.search(low):
         dist = _distance(low) or "500 Meters"
-        target = first or "INPUT"
         if not first:
             spec.notes.append("buffer requested but no data source found — "
                               "set the input path in CONFIG")
+        # bare "dissolve" folds into the buffer; "dissolve by FIELD" stays
+        # a separate step so the field is honoured
+        fold = "ALL" if ("dissolve" in low and not diss) else "NONE"
         spec.operations.append(Operation(
-            tool="buffer", inputs=[target], output="buffered",
-            params={"distance": dist, "dissolve": "ALL" if "dissolve" in low else "NONE"}))
+            tool="buffer", inputs=[current], output="buffered",
+            params={"distance": dist, "dissolve": fold}))
+        current = "buffered"
+    if diss:
+        spec.operations.append(Operation(tool="dissolve", inputs=[current],
+                                         output="dissolved",
+                                         params={"field": diss.group(1)}))
+        current = "dissolved"
     m = _CLIP_RE.search(t)
     if m:
         clip_to = _first_path_after(t, m.end()) or (paths[1] if len(paths) > 1 else None)
-        subject = "buffered" if any(o.tool == "buffer" for o in spec.operations) \
-            else (first or "INPUT")
         if clip_to:
             spec.operations.append(Operation(tool="clip", output="clipped",
-                                             inputs=[subject, _basename(clip_to)]))
+                                             inputs=[current, _basename(clip_to)]))
+            current = "clipped"
         else:
             spec.notes.append("clip requested but the clip boundary could not be "
                               "identified — add it to CONFIG['sources']")
-    m = _DISSOLVE_RE.search(t)
-    if m and not _BUFFER_RE.search(low):
-        spec.operations.append(Operation(tool="dissolve", inputs=[first or "INPUT"],
-                                         output="dissolved", params={"field": m.group(1)}))
+    m = _ERASE_RE.search(t)
+    if m:
+        erase_feats = _first_path_after(t, m.start(1) - 1)
+        base = _first_path_after(t, m.start(2) - 1)
+        if erase_feats and base:               # arcpy: Erase(in_features, erase_features)
+            spec.operations.append(Operation(tool="erase", output="erased",
+                                             inputs=[_basename(base), _basename(erase_feats)]))
+            current = "erased"
+    if re.search(r"\bintersect", low) and len(paths) >= 2:
+        spec.operations.append(Operation(tool="intersect", output="intersected",
+                                         inputs=[_basename(paths[0]), _basename(paths[1])]))
+        current = "intersected"
+    if re.search(r"\b(?:union|merge)\b", low) and len(paths) >= 2:
+        tool = "union" if "union" in low else "merge"
+        spec.operations.append(Operation(tool=tool, output=f"{tool}ed",
+                                         inputs=[_basename(p) for p in paths]))
+        current = f"{tool}ed"
     if re.search(r"\bspatial(?:ly)?\s+join", low) and len(paths) >= 2:
         spec.operations.append(Operation(
             tool="spatial_join", output="joined",
             inputs=[_basename(paths[0]), _basename(paths[1])]))
-    m = _WHERE_RE.search(t)
+        current = "joined"
+    m = _WHERE_DQ_RE.search(t) or _WHERE_SQ_RE.search(t) or _WHERE_RE.search(t)
     if m:
-        spec.operations.append(Operation(tool="select", inputs=[first or "INPUT"],
-                                         output="selected", params={"where": m.group(1).strip()}))
+        spec.operations.append(Operation(tool="select", inputs=[current],
+                                         output="selected",
+                                         params={"where": m.group(1).strip()}))
 
     # ---- symbology on the "final" layer -------------------------------------
     final_layer = _final_layer(spec)
@@ -284,7 +313,7 @@ def _layout(t: str, low: str, name_hint: str) -> Layout:
     if re.search(r"\bjpe?g\b", low):
         ext = ".jpg"
     lay.export = re.sub(r"\W+", "_", lay.title.lower()).strip("_") + ext
-    lay.legend = "no legend" not in low
-    lay.north_arrow = "no north arrow" not in low
-    lay.scale_bar = "no scale bar" not in low
+    lay.legend = not re.search(_NO_SURROUND_RE % "legend", low)
+    lay.north_arrow = not re.search(_NO_SURROUND_RE % "north\\s+arrow", low)
+    lay.scale_bar = not re.search(_NO_SURROUND_RE % "scale\\s*bar", low)
     return lay
