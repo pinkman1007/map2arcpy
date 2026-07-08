@@ -99,6 +99,10 @@ outside it, the parser degrades to a scaffold with TODOs, never a guess.
   projected-coordinate CSVs need the CONFIG epsg checked.
 * KML conversion at run time (KMLToLayer) writes a <name>.gdb beside the
   script; complex KML (network links, ground overlays) is out of scope.
+* ZIP input extracts to a sibling `_unzipped/` folder as a parse-time side
+  effect (the generated script needs real paths) — caps: 200 members,
+  256 MB/member, 512 MB total, 10 datasets parsed; traversal-safe. Nested
+  zips inside zips are not recursed.
 
 ## 5. Images and PDFs
 

@@ -56,6 +56,7 @@ page size — sits in one `CONFIG` dict at the top of the script.
 | GeoTIFF / ASCII grid (`.asc`) / ArcGrid folder / NetCDF (`.nc`) / SRTM `.hgt` / `.flt`/`.bil` / `.jp2`/`.ecw`/`.sid`/`.dem`/`.img` | georeferencing and metadata read at header level (GeoTIFF tags, ASCII-grid header, ArcGrid `dblbnd.adf`, classic-NetCDF dimensions+variables, SRTM tile name); NetCDF loads via MakeNetCDFRasterLayer with the detected variable |
 | image + world file / PDF | world-file affine or geospatial-PDF markers recovered; the script scaffolds a map around the raster. *Plain screenshots are experimental — pixels can't be reverse-engineered into layers by rules, and the tool says so instead of guessing.* |
 | CAD (`.dxf`/`.dwg`/`.dgn`) | added as a native CAD dataset with sub-layer addressing notes (CAD carries no CRS — the script flags it) |
+| `.zip` archives | extracted to a sibling `_unzipped/` folder and every supported dataset inside is parsed and merged into one map — a zipped shapefile from a data portal "just works", preview images inside are ignored |
 | a saved MapSpec `.json` | regenerated exactly — the IR is the contract |
 
 ## The honest bits

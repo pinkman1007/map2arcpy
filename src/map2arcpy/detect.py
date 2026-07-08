@@ -5,7 +5,7 @@ import json
 import os
 
 from .spec import MapSpec
-from .parsers import nl, cim, data, image
+from .parsers import nl, cim, data, image, archive
 
 _CIM_EXT = (".aprx", ".lyrx", ".mapx")
 _DATA_EXT = (".geojson", ".shp", ".gpkg", ".kml", ".kmz", ".gpx", ".csv",
@@ -22,6 +22,8 @@ def detect_kind(inp: str) -> str:
         return "image"                                 # binary ArcGrid folder
     if os.path.exists(inp) and not os.path.isdir(inp):
         ext = os.path.splitext(inp)[1].lower()
+        if ext == ".zip":
+            return "archive"
         if ext in _CIM_EXT:
             return "cim"
         if ext in _DATA_EXT:
@@ -49,7 +51,7 @@ def detect_kind(inp: str) -> str:
     # looks like a file reference but doesn't exist -> fail loudly, don't
     # silently reinterpret a typo'd path as a map description
     ext = os.path.splitext(inp)[1].lower()
-    if " " not in inp and ext in (_CIM_EXT + _DATA_EXT + _IMAGE_EXT + (".json",)):
+    if " " not in inp and ext in (_CIM_EXT + _DATA_EXT + _IMAGE_EXT + (".json", ".zip")):
         raise FileNotFoundError(f"input file not found: {inp}")
     # not a file -> treat the string itself as a description
     return "nl"
@@ -57,6 +59,8 @@ def detect_kind(inp: str) -> str:
 
 def parse_any(inp: str) -> MapSpec:
     kind = detect_kind(inp)
+    if kind == "archive":
+        return archive.parse(inp)
     if kind == "cim":
         return cim.parse(inp)
     if kind == "data":
