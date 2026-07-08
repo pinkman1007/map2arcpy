@@ -98,7 +98,7 @@
     <h2>2 · Result <span class="pill" id="meta"></span></h2>
     <div class="tabs">
       <button data-tab="script" class="active">Script</button>
-      <button data-tab="spec">MapSpec</button>
+      <button data-tab="spec">MapSpec (info)</button>
       <button data-tab="notes">Notes &amp; TODOs</button>
     </div>
     <div id="tab-script">
@@ -109,7 +109,14 @@
       </div>
       <pre id="script"># your generated arcpy script appears here</pre>
     </div>
-    <div id="tab-spec" hidden><pre id="spec"># the intermediate MapSpec JSON appears here</pre></div>
+    <div id="tab-spec" hidden>
+      <div style="color:var(--warn);font-size:13px;margin:0 0 8px">
+        ⚠ This JSON describes what the parser understood — it is <b>not runnable code</b>.
+        Do not paste it into ArcGIS Pro. The runnable file is on the <b>Script</b> tab
+        (use “Download .py”, then <code>%run</code> it in Pro).
+      </div>
+      <pre id="spec"># the intermediate MapSpec JSON appears here</pre>
+    </div>
     <div id="tab-notes" hidden><ul class="notes" id="notes"><li class="info">nothing yet</li></ul></div>
   </section>
 </main>
