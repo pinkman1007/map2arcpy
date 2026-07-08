@@ -134,3 +134,11 @@ def test_scripts_define_crs_on_unknown_datasets():
     code = convert(os.path.join(EXAMPLES, "wards.geojson"))
     assert "ensure_crs_defined(CONFIG['sources'], CONFIG['epsg'])" in code
     ast.parse(code)
+
+
+def test_scripts_open_the_map_view():
+    from map2arcpy.generator.runtime import runtime_source
+    assert "def show_in_pro" in runtime_source()
+    code = convert(os.path.join(EXAMPLES, "wards.geojson"))
+    assert "show_in_pro(aprx, m, layout)" in code
+    ast.parse(code)

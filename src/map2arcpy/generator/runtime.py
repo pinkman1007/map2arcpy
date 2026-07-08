@@ -349,6 +349,31 @@ def geojson_to_fc(path, out_fc, geometry="POLYGON"):
     return out_fc
 
 
+def show_in_pro(aprx, the_map, layout=None):
+    """Bring the freshly built map (and layout) up in the ArcGIS Pro window
+    and zoom to the data. Uses openView (Pro 3.1+); harmlessly skipped when
+    running headless via propy.bat."""
+    if layout is not None:
+        try:
+            layout.openView()
+        except Exception as e:
+            log("layout view not opened: %s" % e, "WARN")
+    try:
+        the_map.openView()
+        try:
+            mv = aprx.activeView
+            lyrs = [l for l in the_map.listLayers()
+                    if not l.isBasemapLayer and l.visible]
+            if lyrs and hasattr(mv, "getLayerExtent"):
+                mv.camera.setExtent(mv.getLayerExtent(lyrs[0]))
+        except Exception as e:
+            log("auto-zoom skipped: %s" % e, "WARN")
+        log("map view opened in ArcGIS Pro")
+    except Exception as e:
+        log("map view not opened (%s) — double-click the map in the "
+            "Catalog pane" % e, "WARN")
+
+
 def export_layout(layout, out_path, dpi=300):
     d = os.path.dirname(out_path)
     if d:
