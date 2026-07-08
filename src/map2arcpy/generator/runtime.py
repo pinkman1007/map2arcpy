@@ -126,19 +126,58 @@ def ensure_projected(fc, epsg, out):
     return out
 
 
-def apply_simple(layer, hexc, outline=None, transparency=0):
+def apply_simple(layer, hexc, outline=None, transparency=0,
+                 outline_width=0, marker_size=0):
     try:
         sym = layer.symbology
-        if hasattr(sym, "renderer"):
+        if hasattr(sym, "renderer") and hasattr(sym.renderer, "symbol"):
             sym.renderer.symbol.color = {"RGB": hex_to_rgb(hexc)}
             if outline:
                 sym.renderer.symbol.outlineColor = {"RGB": hex_to_rgb(outline)}
+            if outline_width:
+                try:
+                    sym.renderer.symbol.outlineWidth = float(outline_width)
+                except Exception:
+                    pass
+            if marker_size:
+                try:
+                    sym.renderer.symbol.size = float(marker_size)
+                except Exception:
+                    pass
             layer.symbology = sym
         if transparency:
-            layer.transparency = transparency
+            layer.transparency = int(transparency)
         log("simple symbology on '%s' (%s)" % (layer.name, hexc))
     except Exception as e:
         log("simple symbology skipped on '%s': %s" % (layer.name, e), "WARN")
+
+
+_CLASS_METHODS = {
+    "natural_breaks": "NaturalBreaks", "quantile": "Quantile",
+    "equal_interval": "EqualInterval", "geometric": "GeometricInterval",
+    "std_dev": "StandardDeviation", "defined_interval": "DefinedInterval",
+}
+
+
+def _ramp_interp(ramp, n):
+    """Stretch/shrink a list of hex colours to exactly n stops (linear
+    interpolation in RGB) so any class count gets a smooth ramp."""
+    if n <= 0 or not ramp:
+        return list(ramp)
+    if n == len(ramp):
+        return list(ramp)
+    if len(ramp) == 1:
+        return [ramp[0]] * n
+    rgb = [hex_to_rgb(h)[:3] for h in ramp]
+    out = []
+    for i in range(n):
+        pos = i * (len(rgb) - 1) / (n - 1) if n > 1 else 0
+        lo = int(pos)
+        hi = min(lo + 1, len(rgb) - 1)
+        f = pos - lo
+        c = [int(round(rgb[lo][k] + (rgb[hi][k] - rgb[lo][k]) * f)) for k in range(3)]
+        out.append("#%02X%02X%02X" % tuple(c))
+    return out
 
 
 def apply_unique(layer, field, mapping):
@@ -164,22 +203,32 @@ def apply_unique(layer, field, mapping):
         log("unique symbology skipped: %s" % e, "WARN")
 
 
-def apply_graduated(layer, field, breaks, ramp):
-    """Graduated colours with explicit breaks (breaks may be [] -> defaults)."""
+def apply_graduated(layer, field, breaks, ramp, method=None, class_count=0):
+    """Graduated colours. `method` picks the classification (natural_breaks,
+    quantile, equal_interval, geometric, std_dev); `class_count` sets the
+    number of classes (ramp is interpolated to match). Explicit `breaks`
+    override the method."""
     try:
         sym = layer.symbology
         sym.updateRenderer("GraduatedColorsRenderer")
         sym.renderer.classificationField = field
-        n = len(breaks) if breaks else len(ramp)
+        if method in _CLASS_METHODS:
+            try:
+                sym.renderer.classificationMethod = _CLASS_METHODS[method]
+            except Exception as e:
+                log("classification method '%s' not applied: %s" % (method, e), "WARN")
+        n = class_count or (len(breaks) if breaks else len(ramp))
         sym.renderer.breakCount = n
+        colours = _ramp_interp(ramp, n)
         cbs = sym.renderer.classBreaks
         for i, brk in enumerate(cbs):
             if breaks and i < len(breaks):
                 brk.upperBound = breaks[i]
-            if i < len(ramp):
-                brk.symbol.color = {"RGB": hex_to_rgb(ramp[i])}
+            if i < len(colours):
+                brk.symbol.color = {"RGB": hex_to_rgb(colours[i])}
         layer.symbology = sym
-        log("graduated symbology on '%s', %d classes" % (field, n))
+        log("graduated symbology on '%s', %d classes%s" %
+            (field, n, (" (" + method + ")") if method else ""))
     except Exception as e:
         log("graduated symbology skipped: %s" % e, "WARN")
 

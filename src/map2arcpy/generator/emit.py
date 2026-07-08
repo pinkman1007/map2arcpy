@@ -251,11 +251,13 @@ def _emit_layer_add(l: Layer, spec: MapSpec, basemap_ok: bool = True) -> List[st
     if r.type == "unique" and r.field:
         body.append(f"apply_unique(lyr, {r.field!r}, {r.color_map!r})")
     elif r.type == "graduated" and r.field:
-        body.append(f"apply_graduated(lyr, {r.field!r}, {r.breaks!r}, {r.ramp!r})")
+        body.append(f"apply_graduated(lyr, {r.field!r}, {r.breaks!r}, {r.ramp!r}, "
+                    f"{r.class_method!r}, {int(r.class_count)})")
     elif r.type == "stretch":
         body.append(f"apply_stretch(lyr, {r.ramp!r})")
     elif r.color:
-        body.append(f"apply_simple(lyr, {r.color!r}, {r.outline!r}, {int(r.transparency)})")
+        body.append(f"apply_simple(lyr, {r.color!r}, {r.outline!r}, "
+                    f"{int(r.transparency)}, {r.outline_width}, {r.marker_size})")
     if l.definition_query:
         body.append(f"lyr.definitionQuery = {l.definition_query!r}")
     if l.label_field:

@@ -81,3 +81,62 @@ def test_server_accepts_style(tmp_path):
         assert j["filename"] == "via_api.py"
     finally:
         httpd.shutdown()
+
+
+def test_new_ramps_and_reverse():
+    spec = data.parse(os.path.join(EXAMPLES, "wards.geojson"))
+    apply_style(spec, {"ramp": "spectral"})
+    first = spec.layers[0].renderer.ramp[0]
+    apply_style(spec, {"reverse_ramp": True})
+    assert spec.layers[0].renderer.ramp[-1] == first        # reversed
+    assert any("reverse_ramp" in n for n in spec.notes)
+
+
+def test_classes_and_method():
+    spec = data.parse(os.path.join(EXAMPLES, "wards.geojson"))
+    apply_style(spec, {"classes": 7, "classify": "quantile"})
+    r = spec.layers[0].renderer
+    assert r.class_count == 7 and r.class_method == "quantile"
+    code = generate(spec, strict=False)
+    assert "apply_graduated(lyr, 'population', [], " in code
+    assert "'quantile', 7)" in code
+    ast.parse(code)
+
+
+def test_transparency_outline_marker():
+    from map2arcpy.parsers import nl as _nl
+    spec = _nl.parse("show sites.shp in red, epsg 32644")
+    spec.layers[-1].geometry = "point"
+    apply_style(spec, {"transparency": 40, "outline": "1F4E5F",
+                       "outline_width": 1.5, "marker_size": 8})
+    r = spec.layers[-1].renderer
+    assert r.transparency == 40 and r.outline == "#1F4E5F"
+    assert r.outline_width == 1.5 and r.marker_size == 8.0
+    code = generate(spec, strict=False)
+    assert "apply_simple(lyr, '#D7191C', '#1F4E5F', 40, 1.5, 8.0)" in code
+    ast.parse(code)
+
+
+def test_invalid_new_values_skip():
+    spec = data.parse(os.path.join(EXAMPLES, "wards.geojson"))
+    apply_style(spec, {"classes": 99, "classify": "wizardry",
+                       "transparency": 500, "outline_width": 50})
+    assert sum("skipped" in n for n in spec.notes) == 4
+
+
+def test_ramp_interp_in_runtime():
+    from map2arcpy.generator import runtime
+    five = runtime._ramp_interp(["#000000", "#FFFFFF"], 5)
+    assert len(five) == 5 and five[0] == "#000000" and five[-1] == "#FFFFFF"
+    assert five[2] == "#808080"                             # midpoint grey
+
+
+def test_cli_new_style_flags(tmp_path):
+    out = tmp_path / "s.py"
+    rc = main(["generate", os.path.join(EXAMPLES, "wards.geojson"), "-o", str(out),
+               "--no-profile", "--classes", "6", "--classify", "natural_breaks",
+               "--reverse-ramp", "--transparency", "30"])
+    assert rc == 0
+    code = out.read_text()
+    assert "'natural_breaks', 6)" in code
+    ast.parse(code)

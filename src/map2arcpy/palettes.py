@@ -20,10 +20,18 @@ RAMPS = {
     "blues":   ["#EFF3FF", "#BDD7E7", "#6BAED6", "#3182BD", "#08519C"],
     "reds":    ["#FEE5D9", "#FCAE91", "#FB6A4A", "#DE2D26", "#A50F15"],
     "oranges": ["#FEEDDE", "#FDBE85", "#FD8D3C", "#E6550D", "#A63603"],
+    "purples": ["#F2F0F7", "#CBC9E2", "#9E9AC8", "#756BB1", "#54278F"],
+    "greys":   ["#F7F7F7", "#CCCCCC", "#969696", "#636363", "#252525"],
     "viridis": ["#440154", "#3B528B", "#21918C", "#5EC962", "#FDE725"],
+    "magma":   ["#000004", "#51127C", "#B63679", "#FB8861", "#FCFDBF"],
+    "plasma":  ["#0D0887", "#6A00A8", "#B12A90", "#E16462", "#FCA636"],
+    "cividis": ["#00204D", "#31446B", "#666970", "#958F78", "#FFEA46"],
     # diverging
     "red_blue":   ["#CA0020", "#F4A582", "#F7F7F7", "#92C5DE", "#0571B0"],
     "brown_teal": ["#A6611A", "#DFC27D", "#F5F5F5", "#80CDC1", "#018571"],
+    "red_yellow_green": ["#D73027", "#FC8D59", "#FEE08B", "#D9EF8B", "#91CF60", "#1A9850"],
+    "spectral":   ["#D53E4F", "#FC8D59", "#FEE08B", "#E6F598", "#99D594", "#3288BD"],
+    "pink_green": ["#C51B7D", "#E9A3C9", "#F7F7F7", "#A1D76A", "#4D9221"],
 }
 
 DEFAULT_RAMP = "viridis"

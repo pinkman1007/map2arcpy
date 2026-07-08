@@ -63,6 +63,13 @@ def main(argv=None) -> int:
     st.add_argument("--page", help="A4P|A4L|A3P|A3L|LetterP|LetterL")
     st.add_argument("--dpi", type=int)
     st.add_argument("--format", dest="fmt", help="pdf|png|jpg")
+    st.add_argument("--reverse-ramp", action="store_true", help="flip the ramp direction")
+    st.add_argument("--classes", type=int, help="choropleth class count (2-12)")
+    st.add_argument("--classify", help="natural_breaks|quantile|equal_interval|geometric|std_dev")
+    st.add_argument("--transparency", type=int, help="layer transparency 0-100")
+    st.add_argument("--outline", help="#RRGGBB outline for vector layers")
+    st.add_argument("--outline-width", type=float, help="outline width in points")
+    st.add_argument("--marker-size", type=float, help="point marker size in points")
 
     i = sub.add_parser("inspect", help="show the MapSpec a given input produces")
     i.add_argument("input")
@@ -215,7 +222,11 @@ def _generate(args) -> int:
     style = {k: v for k, v in {
         "title": args.title, "subtitle": args.subtitle, "ramp": args.ramp,
         "color": args.color, "basemap": args.basemap, "page": args.page,
-        "dpi": args.dpi, "format": args.fmt}.items() if v}
+        "dpi": args.dpi, "format": args.fmt,
+        "reverse_ramp": args.reverse_ramp or None, "classes": args.classes,
+        "classify": args.classify, "transparency": args.transparency,
+        "outline": args.outline, "outline_width": args.outline_width,
+        "marker_size": args.marker_size}.items() if v}
     if style:
         from .style import apply_style
         apply_style(spec, style)

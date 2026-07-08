@@ -91,6 +91,95 @@ def apply_style(spec: MapSpec, style: Dict[str, Any]) -> MapSpec:
         else:
             skipped.append(f"ramp '{ramp}' (use one of {', '.join(RAMPS)})")
 
+    if style.get("reverse_ramp"):
+        n = 0
+        for l in spec.layers:
+            if l.renderer.ramp:
+                l.renderer.ramp = list(reversed(l.renderer.ramp))
+                n += 1
+        applied.append(f"reverse_ramp ({n} layers)")
+
+    classes = style.get("classes")
+    if classes:
+        try:
+            c = int(classes)
+            if 2 <= c <= 12:
+                for l in spec.layers:
+                    if l.renderer.type == "graduated":
+                        l.renderer.class_count = c
+                applied.append(f"classes={c}")
+            else:
+                skipped.append(f"classes {c} (2-12)")
+        except (TypeError, ValueError):
+            skipped.append(f"classes '{classes}'")
+
+    method = style.get("classify")
+    if method:
+        m = str(method).lower().replace(" ", "_")
+        valid = ("natural_breaks", "quantile", "equal_interval",
+                 "geometric", "std_dev", "defined_interval")
+        if m in valid:
+            for l in spec.layers:
+                if l.renderer.type == "graduated":
+                    l.renderer.class_method = m
+            applied.append(f"classify={m}")
+        else:
+            skipped.append(f"classify '{method}' (use one of {', '.join(valid)})")
+
+    trans = style.get("transparency")
+    if trans is not None and trans != "":
+        try:
+            tv = int(trans)
+            if 0 <= tv <= 100:
+                for l in spec.layers:
+                    if l.kind != "basemap":
+                        l.renderer.transparency = tv
+                applied.append(f"transparency={tv}")
+            else:
+                skipped.append(f"transparency {tv} (0-100)")
+        except (TypeError, ValueError):
+            skipped.append(f"transparency '{trans}'")
+
+    outline = style.get("outline")
+    if outline:
+        o = str(outline).strip()
+        if _HEX.match(o):
+            o = "#" + o.lstrip("#").upper()
+            for l in spec.layers:
+                if l.kind == "vector":
+                    l.renderer.outline = o
+            applied.append(f"outline={o}")
+        else:
+            skipped.append(f"outline '{outline}' (use #RRGGBB)")
+
+    ow = style.get("outline_width")
+    if ow is not None and ow != "":
+        try:
+            w = float(ow)
+            if 0 <= w <= 10:
+                for l in spec.layers:
+                    if l.kind == "vector":
+                        l.renderer.outline_width = w
+                applied.append(f"outline_width={w}")
+            else:
+                skipped.append(f"outline_width {w} (0-10 pt)")
+        except (TypeError, ValueError):
+            skipped.append(f"outline_width '{ow}'")
+
+    ms = style.get("marker_size")
+    if ms is not None and ms != "":
+        try:
+            s = float(ms)
+            if 0 < s <= 72:
+                for l in spec.layers:
+                    if l.geometry == "point" or (l.kind == "vector" and not l.geometry):
+                        l.renderer.marker_size = s
+                applied.append(f"marker_size={s}")
+            else:
+                skipped.append(f"marker_size {s} (1-72 pt)")
+        except (TypeError, ValueError):
+            skipped.append(f"marker_size '{ms}'")
+
     color = style.get("color")
     if color:
         c = str(color).strip()

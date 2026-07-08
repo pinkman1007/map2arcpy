@@ -67,6 +67,10 @@ class Renderer:
     breaks: List[float] = dataclasses.field(default_factory=list)         # graduated class breaks
     outline: Optional[str] = None
     transparency: int = 0                      # 0-100
+    class_count: int = 0                       # graduated: # classes (0 = auto)
+    class_method: Optional[str] = None         # natural_breaks|quantile|equal_interval|geometric|std_dev
+    outline_width: float = 0.0                 # points (0 = default)
+    marker_size: float = 0.0                   # points, for point markers (0 = default)
 
     def validate(self) -> List[str]:
         errs = []

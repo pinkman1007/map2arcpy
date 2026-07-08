@@ -102,10 +102,26 @@
         <label>Title<input type="text" id="st_title" placeholder="(auto)" class="stin"></label>
         <label>Subtitle<input type="text" id="st_subtitle" placeholder="(auto)" class="stin"></label>
         <label>Colour ramp<select id="st_ramp" class="stin">
-          <option value="auto">auto</option><option>greens</option><option>blues</option>
-          <option>reds</option><option>oranges</option><option>viridis</option>
-          <option>red_blue</option><option>brown_teal</option></select></label>
+          <option value="auto">auto</option>
+          <optgroup label="sequential"><option>greens</option><option>blues</option>
+          <option>reds</option><option>oranges</option><option>purples</option>
+          <option>greys</option><option>viridis</option><option>magma</option>
+          <option>plasma</option><option>cividis</option></optgroup>
+          <optgroup label="diverging"><option>red_blue</option><option>brown_teal</option>
+          <option>red_yellow_green</option><option>spectral</option>
+          <option>pink_green</option></optgroup></select></label>
+        <label>Reverse ramp<select id="st_reverse_ramp" class="stin">
+          <option value="auto">no</option><option value="yes">yes</option></select></label>
         <label>Single colour<input type="text" id="st_color" placeholder="#RRGGBB (auto)" class="stin"></label>
+        <label>Classes (choropleth)<input type="number" id="st_classes" placeholder="auto" min="2" max="12" class="stin"></label>
+        <label>Classify method<select id="st_classify" class="stin">
+          <option value="auto">auto</option><option value="natural_breaks">natural breaks</option>
+          <option value="quantile">quantile</option><option value="equal_interval">equal interval</option>
+          <option value="geometric">geometric</option><option value="std_dev">std deviation</option></select></label>
+        <label>Transparency %<input type="number" id="st_transparency" placeholder="0" min="0" max="100" class="stin"></label>
+        <label>Outline colour<input type="text" id="st_outline" placeholder="#RRGGBB (auto)" class="stin"></label>
+        <label>Outline width pt<input type="number" step="0.5" id="st_outline_width" placeholder="auto" min="0" max="10" class="stin"></label>
+        <label>Marker size pt<input type="number" step="1" id="st_marker_size" placeholder="auto" min="1" max="72" class="stin"></label>
         <label>Basemap<select id="st_basemap" class="stin">
           <option value="auto">auto</option><option value="none">none</option>
           <option>Imagery</option><option>Topographic</option><option>Streets</option>
@@ -243,7 +259,14 @@ function styleObj(){
   if($("st_title").value.trim()) s.title = $("st_title").value.trim();
   if($("st_subtitle").value.trim()) s.subtitle = $("st_subtitle").value.trim();
   if($("st_ramp").value !== "auto") s.ramp = $("st_ramp").value;
+  if($("st_reverse_ramp").value === "yes") s.reverse_ramp = true;
   if($("st_color").value.trim()) s.color = $("st_color").value.trim();
+  if($("st_classes").value) s.classes = parseInt($("st_classes").value, 10);
+  if($("st_classify").value !== "auto") s.classify = $("st_classify").value;
+  if($("st_transparency").value) s.transparency = parseInt($("st_transparency").value, 10);
+  if($("st_outline").value.trim()) s.outline = $("st_outline").value.trim();
+  if($("st_outline_width").value) s.outline_width = parseFloat($("st_outline_width").value);
+  if($("st_marker_size").value) s.marker_size = parseFloat($("st_marker_size").value);
   if($("st_basemap").value !== "auto") s.basemap = $("st_basemap").value;
   if($("st_page").value !== "auto") s.page = $("st_page").value;
   if($("st_format").value !== "auto") s.format = $("st_format").value;

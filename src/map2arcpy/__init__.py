@@ -3,7 +3,7 @@ from .spec import MapSpec, Layer, Operation, Renderer, Layout   # noqa: F401
 from .detect import parse_any, detect_kind                      # noqa: F401
 from .generator import generate                                 # noqa: F401
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 
 def convert(inp: str, strict: bool = False, web: bool = False,
