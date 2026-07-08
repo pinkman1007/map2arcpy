@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import datetime
+import os
 from typing import List
 
 from ..spec import MapSpec, Layer, Operation, KNOWN_OPS
@@ -169,35 +170,64 @@ def _emit_layer_add(l: Layer, spec: MapSpec) -> List[str]:
         lines.append(f"    m.addBasemap({l.source!r})")
         return lines
     op_outputs = {op.output for op in spec.operations if op.output}
+    ext = os.path.splitext(l.source.lower())[1] if l.source else ""
+    src = f"CONFIG['sources'][{l.name!r}]"
+    guarded = False                                # helper loaders may return None
     if l.name in op_outputs and not l.source:
         lines.append(f"    lyr = m.addDataFromPath(os.path.join(results, {l.name!r}))")
-    elif l.kind == "vector" and l.source.lower().endswith(".geojson"):
+    elif l.kind == "vector" and ext == ".geojson":
         geom = {"point": "POINT", "line": "POLYLINE"}.get(l.geometry or "", "POLYGON")
-        lines.append(f"    _fc = geojson_to_fc(CONFIG['sources'][{l.name!r}],")
+        lines.append(f"    _fc = geojson_to_fc({src},")
         lines.append(f"        os.path.join(results, {l.name!r}), {geom!r})")
         lines.append("    lyr = m.addDataFromPath(_fc)")
+    elif ext == ".nc":
+        x = l.extra.get("variable", "TODO_VARIABLE")
+        lines.append(f"    lyr = add_netcdf(m, results, {src}, {l.name!r},")
+        lines.append(f"        {x!r}, {l.extra.get('x_dim', 'lon')!r}, "
+                     f"{l.extra.get('y_dim', 'lat')!r})")
+        guarded = True
+    elif ext == ".gpx":
+        lines.append(f"    lyr = add_gpx(m, results, {src}, {l.name!r})")
+        guarded = True
+    elif ext == ".csv":
+        xf = l.extra.get("x_field", "TODO_X_FIELD")
+        yf = l.extra.get("y_field", "TODO_Y_FIELD")
+        lines.append(f"    lyr = add_csv_xy(m, results, {src}, {l.name!r},")
+        lines.append(f"        {xf!r}, {yf!r}, CONFIG['epsg'] if {xf!r} not in "
+                     f"('lat', 'lon', 'latitude', 'longitude', 'lng', 'long') else 4326)")
+        guarded = True
+    elif ext in (".kml", ".kmz"):
+        lines.append(f"    lyr = add_kml(m, work_dir, {src}, {l.name!r})")
+        guarded = True
     else:
-        lines.append(f"    lyr = m.addDataFromPath(CONFIG['sources'][{l.name!r}])")
+        lines.append(f"    lyr = m.addDataFromPath({src})")
+
+    body: List[str] = []
     r = l.renderer
     if r.type == "unique" and r.field:
-        lines.append(f"    apply_unique(lyr, {r.field!r}, {r.color_map!r})")
+        body.append(f"apply_unique(lyr, {r.field!r}, {r.color_map!r})")
     elif r.type == "graduated" and r.field:
-        lines.append(f"    apply_graduated(lyr, {r.field!r}, {r.breaks!r}, {r.ramp!r})")
+        body.append(f"apply_graduated(lyr, {r.field!r}, {r.breaks!r}, {r.ramp!r})")
     elif r.type == "stretch":
-        lines.append(f"    apply_stretch(lyr, {r.ramp!r})")
+        body.append(f"apply_stretch(lyr, {r.ramp!r})")
     elif r.color:
-        lines.append(f"    apply_simple(lyr, {r.color!r}, {r.outline!r}, {int(r.transparency)})")
+        body.append(f"apply_simple(lyr, {r.color!r}, {r.outline!r}, {int(r.transparency)})")
     if l.definition_query:
-        lines.append(f"    lyr.definitionQuery = {l.definition_query!r}")
+        body.append(f"lyr.definitionQuery = {l.definition_query!r}")
     if l.label_field:
-        lines.append("    try:")
-        lines.append(f"        lc = lyr.listLabelClasses()[0]")
-        lines.append(f"        lc.expression = '$feature.{l.label_field}'")
-        lines.append("        lyr.showLabels = True")
-        lines.append("    except Exception as e:")
-        lines.append(f"        log('labels skipped: %s' % e, 'WARN')")
+        body.append("try:")
+        body.append(f"    lc = lyr.listLabelClasses()[0]")
+        body.append(f"    lc.expression = '$feature.{l.label_field}'")
+        body.append("    lyr.showLabels = True")
+        body.append("except Exception as e:")
+        body.append(f"    log('labels skipped: %s' % e, 'WARN')")
     if not l.visible:
-        lines.append("    lyr.visible = False")
+        body.append("lyr.visible = False")
+    if guarded and body:
+        lines.append("    if lyr:")
+        lines.extend("        " + b for b in body)
+    else:
+        lines.extend("    " + b for b in body)
     for n in l.notes:
         lines.append(f"    # TODO: {_safe_text(n)}")
     return lines

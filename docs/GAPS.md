@@ -87,9 +87,18 @@ outside it, the parser degrades to a scaffold with TODOs, never a guess.
   TODO layers — export them to a feature class first. Secured services
   aren't authenticated at parse time; the script relies on Pro's portal
   sign-in. VectorTile basemaps map to the nearest named Esri basemap.
-* GeoPackage (.gpkg), KML/KMZ, file-gdb-on-disk introspection, and CSV
-  XY tables are recognised as *paths in NL descriptions* but have **no
-  data-profiling parser** — the layer is added with a default renderer.
+* ~~GeoPackage, KML/KMZ, CSV XY tables have no data-profiling parser~~ —
+  **fixed in v0.4.0** (gpkg via sqlite3 with field profiling; KML/KMZ/GPX
+  censused via ElementTree; CSV coordinate-column sniffing). Still true:
+  file-gdb-on-disk (.gdb folder) contents are not introspected.
+* v0.4.0 raster formats are parsed at header level only: netCDF-4 (HDF5)
+  variables are NOT parsed (set the variable in CONFIG); binary ArcGrid
+  cell data stays opaque (extent only, via dblbnd.adf); BigTIFF still
+  unsupported; .jp2/.ecw/.sid headers unread (Pro handles them natively).
+* CSV points assume WGS84 lon/lat unless the column names imply otherwise;
+  projected-coordinate CSVs need the CONFIG epsg checked.
+* KML conversion at run time (KMLToLayer) writes a <name>.gdb beside the
+  script; complex KML (network links, ground overlays) is out of scope.
 
 ## 5. Images and PDFs
 

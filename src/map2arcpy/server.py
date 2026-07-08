@@ -42,7 +42,10 @@ DEFAULT_PORT = 8760
 
 _ALLOWED_UPLOAD_EXT = (".aprx", ".lyrx", ".mapx", ".geojson", ".json", ".shp",
                        ".dbf", ".prj", ".txt", ".tif", ".tiff", ".png", ".jpg",
-                       ".jpeg", ".pdf")
+                       ".jpeg", ".pdf", ".gpkg", ".kml", ".kmz", ".gpx", ".csv",
+                       ".dxf", ".dwg", ".dgn", ".nc", ".asc", ".agr", ".flt",
+                       ".bil", ".bip", ".bsq", ".hdr", ".hgt", ".jp2", ".ecw",
+                       ".sid", ".dem", ".img")
 
 
 def _dashboard_html() -> bytes:

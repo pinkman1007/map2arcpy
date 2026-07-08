@@ -213,6 +213,68 @@ def _surround(layout, mf, kind, style_name, x, y):
         log("%s skipped: %s" % (kind.lower(), e), "WARN")
 
 
+def add_netcdf(m, results, src, name, variable, x_dim="lon", y_dim="lat"):
+    """NetCDF -> raster layer (MakeNetCDFRasterLayer -> CopyRaster -> add)."""
+    try:
+        tmp = name + "_ncl"
+        arcpy.md.MakeNetCDFRasterLayer(src, variable, x_dim, y_dim, tmp)
+        out = os.path.join(results, name)
+        arcpy.management.CopyRaster(tmp, out)
+        log("NetCDF '%s' variable '%s' -> %s" % (os.path.basename(str(src)),
+                                                 variable, out))
+        return m.addDataFromPath(out)
+    except Exception as e:
+        log("NetCDF layer '%s' skipped: %s (check variable/x_dim/y_dim in "
+            "CONFIG)" % (name, e), "WARN")
+        return None
+
+
+def add_gpx(m, results, src, name):
+    """GPX -> points feature class (GPXtoFeatures) -> add."""
+    try:
+        out = os.path.join(results, name)
+        arcpy.conversion.GPXtoFeatures(src, out)
+        log("GPX converted -> %s" % out)
+        return m.addDataFromPath(out)
+    except Exception as e:
+        log("GPX layer '%s' skipped: %s" % (name, e), "WARN")
+        return None
+
+
+def add_csv_xy(m, results, src, name, x_field, y_field, epsg=4326):
+    """CSV with coordinate columns -> point feature class -> add."""
+    try:
+        out = os.path.join(results, name)
+        arcpy.management.XYTableToPoint(src, out, x_field, y_field,
+                                        coordinate_system=arcpy.SpatialReference(int(epsg)))
+        log("CSV points (%s/%s) -> %s" % (x_field, y_field, out))
+        return m.addDataFromPath(out)
+    except Exception as e:
+        log("CSV layer '%s' skipped: %s (set x_field/y_field in the "
+            "add_csv_xy call)" % (name, e), "WARN")
+        return None
+
+
+def add_kml(m, work_dir, src, name):
+    """KML/KMZ -> KMLToLayer -> add every Placemark feature class found."""
+    try:
+        arcpy.conversion.KMLToLayer(src, work_dir, name)
+        gdb = os.path.join(work_dir, name + ".gdb")
+        added = None
+        for fc in ("Placemarks_Point", "Placemarks_Polyline", "Placemarks_Polygon",
+                   "Points", "Polylines", "Polygons"):
+            p = os.path.join(gdb, fc)
+            if arcpy.Exists(p):
+                added = m.addDataFromPath(p)
+                log("KML class added: %s" % fc)
+        if added is None:
+            log("KML converted but no Placemark classes found in %s" % gdb, "WARN")
+        return added
+    except Exception as e:
+        log("KML layer '%s' skipped: %s" % (name, e), "WARN")
+        return None
+
+
 def set_extent(layout, bbox4326):
     """Zoom the layout's map frame to a WGS84 [xmin, ymin, xmax, ymax] bbox
     (e.g. from a geocoded place). Safe no-op on failure."""

@@ -80,6 +80,8 @@ class Layer:
     label_field: Optional[str] = None
     visible: bool = True
     notes: List[str] = dataclasses.field(default_factory=list)   # parser-added TODOs
+    #: format-specific load parameters (NetCDF variable/dims, CSV x/y fields …)
+    extra: Dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def validate(self) -> List[str]:
         errs = []

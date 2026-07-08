@@ -8,14 +8,19 @@ from .spec import MapSpec
 from .parsers import nl, cim, data, image
 
 _CIM_EXT = (".aprx", ".lyrx", ".mapx")
-_DATA_EXT = (".geojson", ".shp")
-_IMAGE_EXT = (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".pdf")
+_DATA_EXT = (".geojson", ".shp", ".gpkg", ".kml", ".kmz", ".gpx", ".csv",
+             ".dxf", ".dwg", ".dgn")
+_IMAGE_EXT = (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".pdf",
+              ".asc", ".agr", ".flt", ".bil", ".bip", ".bsq", ".hgt",
+              ".nc", ".adf", ".jp2", ".ecw", ".sid", ".dem", ".img")
 _TEXT_EXT = (".txt", ".md")
 
 
 def detect_kind(inp: str) -> str:
     """'nl' | 'cim' | 'data' | 'image' | 'spec' for a path or a description."""
-    if os.path.exists(inp):
+    if os.path.isdir(inp) and os.path.exists(os.path.join(inp, "hdr.adf")):
+        return "image"                                 # binary ArcGrid folder
+    if os.path.exists(inp) and not os.path.isdir(inp):
         ext = os.path.splitext(inp)[1].lower()
         if ext in _CIM_EXT:
             return "cim"

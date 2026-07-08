@@ -35,7 +35,8 @@ _UNITS = {
 }
 
 _DATA_EXT = (".shp", ".geojson", ".json", ".gpkg", ".tif", ".tiff", ".img",
-             ".kml", ".kmz", ".csv", ".lyrx")
+             ".kml", ".kmz", ".csv", ".lyrx", ".nc", ".asc", ".gpx", ".dxf",
+             ".hgt", ".jp2", ".dem", ".flt", ".bil")
 
 _GDB_RE = re.compile(r"[\w:/\\.\- ]+\.gdb[/\\][\w]+", re.I)
 _PATH_RE = re.compile(
@@ -235,7 +236,8 @@ def _basename(p: str) -> str:
 
 def _layer_from_path(p: str) -> Layer:
     ext = os.path.splitext(p)[1].lower()
-    kind = "raster" if ext in (".tif", ".tiff", ".img") else "vector"
+    kind = "raster" if ext in (".tif", ".tiff", ".img", ".nc", ".asc", ".hgt",
+                               ".jp2", ".dem", ".flt", ".bil") else "vector"
     lyr = Layer(name=_basename(p), source=p, kind=kind)
     default = GEOMETRY_DEFAULTS.get("raster" if kind == "raster" else "polygon")
     if default:

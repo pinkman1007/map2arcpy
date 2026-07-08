@@ -50,9 +50,12 @@ page size — sits in one `CONFIG` dict at the top of the script.
 |---|---|
 | plain English (`"choropleth of population from wards.geojson…"`) | a regex grammar extracts sources, operations (buffer/clip/dissolve/select/spatial-join…), colours & ramps, CRS, page, export format |
 | `.lyrx` / `.mapx` / `.aprx` | the CIM JSON is parsed: data connections, definition queries, label fields, and unique-value / class-breaks / simple renderers are carried over faithfully, colours and all |
-| `.geojson` / `.shp` | the data is profiled (geometry type, attribute fields — the shapefile reader is pure stdlib, header + `.dbf` + `.prj`) and sensible cartography is proposed: numeric field → choropleth, low-cardinality text → categories |
+| `.geojson` / `.shp` / `.gpkg` | the data is profiled (geometry types, attribute fields — shapefile via pure-stdlib header+`.dbf`+`.prj`, GeoPackage via stdlib `sqlite3`) and sensible cartography is proposed: numeric field → choropleth, low-cardinality text → categories |
+| `.kml` / `.kmz` / `.gpx` / `.csv` | placemark/waypoint census (ElementTree) or coordinate-column sniffing; the script converts at run time (KMLToLayer, GPXtoFeatures, XYTableToPoint) |
 | ArcGIS web-map JSON | `operationalLayers` become service layers with their drawingInfo renderers translated |
-| GeoTIFF / image + world file / PDF | georeferencing is recovered from TIFF tags, world files, or geospatial-PDF markers; the script scaffolds a map around the raster. *Plain screenshots are experimental — pixels can't be reverse-engineered into layers by rules, and the tool says so instead of guessing.* |
+| GeoTIFF / ASCII grid (`.asc`) / ArcGrid folder / NetCDF (`.nc`) / SRTM `.hgt` / `.flt`/`.bil` / `.jp2`/`.ecw`/`.sid`/`.dem`/`.img` | georeferencing and metadata read at header level (GeoTIFF tags, ASCII-grid header, ArcGrid `dblbnd.adf`, classic-NetCDF dimensions+variables, SRTM tile name); NetCDF loads via MakeNetCDFRasterLayer with the detected variable |
+| image + world file / PDF | world-file affine or geospatial-PDF markers recovered; the script scaffolds a map around the raster. *Plain screenshots are experimental — pixels can't be reverse-engineered into layers by rules, and the tool says so instead of guessing.* |
+| CAD (`.dxf`/`.dwg`/`.dgn`) | added as a native CAD dataset with sub-layer addressing notes (CAD carries no CRS — the script flags it) |
 | a saved MapSpec `.json` | regenerated exactly — the IR is the contract |
 
 ## The honest bits
