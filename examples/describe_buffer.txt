@@ -1,0 +1,3 @@
+Buffer schools.shp by 500 meters and clip to "city_boundary.shp".
+Use UTM zone 44N. Show the result in teal over a topographic basemap.
+Titled 'School Walkability — 500 m', A3 landscape, export to PNG.

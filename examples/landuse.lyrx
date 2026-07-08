@@ -1,0 +1,82 @@
+{
+  "type": "CIMLayerDocument",
+  "version": "3.1.0",
+  "layers": ["CIMPATH=map/landuse.xml"],
+  "layerDefinitions": [
+    {
+      "type": "CIMFeatureLayer",
+      "name": "Land Use 2026",
+      "visibility": true,
+      "featureTable": {
+        "type": "CIMFeatureTable",
+        "definitionExpression": "AREA_HA > 0.1",
+        "dataConnection": {
+          "type": "CIMStandardDataConnection",
+          "workspaceConnectionString": "DATABASE=C:\\GIS\\city.gdb",
+          "workspaceFactory": "FileGDB",
+          "dataset": "landuse_2026",
+          "datasetType": "esriDTFeatureClass"
+        }
+      },
+      "labelClasses": [
+        {"type": "CIMLabelClass", "expression": "$feature.LU_CLASS", "visibility": true}
+      ],
+      "renderer": {
+        "type": "CIMUniqueValueRenderer",
+        "fields": ["LU_CLASS"],
+        "groups": [
+          {
+            "type": "CIMUniqueValueGroup",
+            "classes": [
+              {
+                "type": "CIMUniqueValueClass",
+                "label": "Residential",
+                "values": [{"type": "CIMUniqueValue", "fieldValues": ["Residential"]}],
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {"type": "CIMSolidFill", "enable": true,
+                       "color": {"type": "CIMRGBColor", "values": [255, 235, 175, 100]}}
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "label": "Industrial",
+                "values": [{"type": "CIMUniqueValue", "fieldValues": ["Industrial"]}],
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {"type": "CIMSolidFill", "enable": true,
+                       "color": {"type": "CIMRGBColor", "values": [156, 156, 156, 100]}}
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "label": "Green / Open",
+                "values": [{"type": "CIMUniqueValue", "fieldValues": ["Green"]}],
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {"type": "CIMSolidFill", "enable": true,
+                       "color": {"type": "CIMRGBColor", "values": [112, 173, 71, 100]}}
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

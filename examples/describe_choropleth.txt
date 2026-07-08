@@ -1,0 +1,3 @@
+Choropleth map of population using viridis from wards.geojson on a light gray
+basemap, labeled with ward_name, in EPSG:32644, titled 'Ward Population 2026',
+A4 portrait, 300 dpi, export to PDF.

@@ -1,0 +1,17 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type": "Feature", "properties": {"ward_name": "Ward 1", "population": 41230, "zone": "North"},
+     "geometry": {"type": "Polygon", "coordinates": [[[83.30, 17.72], [83.32, 17.72], [83.32, 17.74], [83.30, 17.74], [83.30, 17.72]]]}},
+    {"type": "Feature", "properties": {"ward_name": "Ward 2", "population": 38875, "zone": "North"},
+     "geometry": {"type": "Polygon", "coordinates": [[[83.32, 17.72], [83.34, 17.72], [83.34, 17.74], [83.32, 17.74], [83.32, 17.72]]]}},
+    {"type": "Feature", "properties": {"ward_name": "Ward 3", "population": 52114, "zone": "Central"},
+     "geometry": {"type": "Polygon", "coordinates": [[[83.30, 17.70], [83.32, 17.70], [83.32, 17.72], [83.30, 17.72], [83.30, 17.70]]]}},
+    {"type": "Feature", "properties": {"ward_name": "Ward 4", "population": 47590, "zone": "Central"},
+     "geometry": {"type": "Polygon", "coordinates": [[[83.32, 17.70], [83.34, 17.70], [83.34, 17.72], [83.32, 17.72], [83.32, 17.70]]]}},
+    {"type": "Feature", "properties": {"ward_name": "Ward 5", "population": 29984, "zone": "South"},
+     "geometry": {"type": "Polygon", "coordinates": [[[83.30, 17.68], [83.32, 17.68], [83.32, 17.70], [83.30, 17.70], [83.30, 17.68]]]}},
+    {"type": "Feature", "properties": {"ward_name": "Ward 6", "population": 61022, "zone": "South"},
+     "geometry": {"type": "Polygon", "coordinates": [[[83.32, 17.68], [83.34, 17.68], [83.34, 17.70], [83.32, 17.70], [83.32, 17.68]]]}}
+  ]
+}

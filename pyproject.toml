@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "map2arcpy"
+version = "0.1.0"
+description = "Rule-based AI that converts any map — a plain-English description, an ArcGIS project (.aprx/.lyrx/.mapx), spatial data (GeoJSON/shapefile/web map), or a georeferenced image — into an executable, standalone ArcGIS Pro (arcpy) Python script."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "UDAAR" }]
+keywords = ["arcgis", "arcpy", "gis", "map", "code-generation", "cartography"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+# Zero runtime dependencies by design: the generator must run inside
+# ArcGIS Pro's conda env, on a locked-down workstation, or in CI without
+# any network access or compiler. Everything is stdlib.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/UDAAR-ARCHITECT/map2arcpy"
+Issues = "https://github.com/UDAAR-ARCHITECT/map2arcpy/issues"
+
+[project.scripts]
+map2arcpy = "map2arcpy.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

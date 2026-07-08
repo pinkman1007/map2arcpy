@@ -1,0 +1,41 @@
+{
+  "title": "City Services Web Map",
+  "spatialReference": {"wkid": 102100, "latestWkid": 3857},
+  "baseMap": {
+    "title": "Light Gray Canvas",
+    "baseMapLayers": [{"id": "base", "layerType": "ArcGISTiledMapServiceLayer"}]
+  },
+  "operationalLayers": [
+    {
+      "id": "clinics",
+      "title": "Health Clinics",
+      "url": "https://services.arcgis.com/example/arcgis/rest/services/clinics/FeatureServer/0",
+      "layerDefinition": {
+        "drawingInfo": {
+          "renderer": {
+            "type": "simple",
+            "symbol": {"type": "esriSMS", "style": "esriSMSCircle", "color": [192, 0, 0, 255], "size": 8}
+          }
+        }
+      }
+    },
+    {
+      "id": "wards",
+      "title": "Ward Boundaries",
+      "url": "https://services.arcgis.com/example/arcgis/rest/services/wards/FeatureServer/0",
+      "layerDefinition": {
+        "drawingInfo": {
+          "renderer": {
+            "type": "classBreaks",
+            "field": "POP_DENS",
+            "classBreakInfos": [
+              {"classMaxValue": 50, "symbol": {"color": [255, 255, 204, 255]}},
+              {"classMaxValue": 150, "symbol": {"color": [120, 198, 121, 255]}},
+              {"classMaxValue": 500, "symbol": {"color": [0, 104, 55, 255]}}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
