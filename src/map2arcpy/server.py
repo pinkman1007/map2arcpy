@@ -166,8 +166,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif self.path == "/health":
+            from .probe import load_profile, summary
             self._json({"ok": True, "version": __version__,
-                        "web_enabled": self.web_enabled})
+                        "web_enabled": self.web_enabled,
+                        "pro_profile": summary(load_profile())})
         elif self.path == "/api/examples":
             from .cli import _EXAMPLES
             self._json(_EXAMPLES)
@@ -196,8 +198,10 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/api/inspect":
             self._json({"spec": spec.to_dict(), "issues": issues})
             return
+        from .probe import load_profile
         try:
-            code = generate(spec, strict=bool(doc.get("strict")))
+            code = generate(spec, strict=bool(doc.get("strict")),
+                            profile=load_profile())
         except ValueError as e:                               # strict-mode failure
             self._json({"error": str(e), "issues": issues}, 422)
             return

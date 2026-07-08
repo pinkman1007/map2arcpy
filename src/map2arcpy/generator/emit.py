@@ -16,31 +16,38 @@ from __future__ import annotations
 import ast
 import datetime
 import os
-from typing import List
+from typing import Any, Dict, List, Optional
 
-from ..spec import MapSpec, Layer, Operation, KNOWN_OPS
+from ..spec import MapSpec, Layer, Operation, KNOWN_OPS, CLASSIC_OPS
+from ..probe import use_classic_tools, pro_version
 from .runtime import runtime_source
 
 GENERATOR_NAME = "map2arcpy"
 
 
-def generate(spec: MapSpec, strict: bool = True) -> str:
+def generate(spec: MapSpec, strict: bool = True,
+             profile: Optional[Dict[str, Any]] = None) -> str:
     """Compile a MapSpec into arcpy script text.
 
     strict=True raises ValueError on spec validation errors; strict=False
     embeds them as TODO comments and generates anyway.
+
+    profile: a saved ArcGIS Pro environment profile (see map2arcpy probe) —
+    when given, generation adapts: classic tools on old Pro, basemaps
+    commented out without a portal sign-in, aprx_template pre-filled.
     """
     errors = spec.validate()
     if errors and strict:
         raise ValueError("MapSpec invalid:\n  - " + "\n  - ".join(errors))
 
+    ops_map = CLASSIC_OPS if use_classic_tools(profile) else KNOWN_OPS
     parts: List[str] = []
-    parts.append(_header(spec, errors))
-    parts.append(_config_block(spec))
+    parts.append(_header(spec, errors, profile))
+    parts.append(_config_block(spec, profile))
     parts.append("\n\n# %s\n# RUNTIME (inlined by %s — edit CONFIG, not this)\n# %s\n"
                  % ("=" * 74, GENERATOR_NAME, "=" * 74))
     parts.append(runtime_source())
-    parts.append(_main_block(spec))
+    parts.append(_main_block(spec, ops_map, profile))
     code = "\n".join(parts)
 
     try:
@@ -60,7 +67,8 @@ def _safe_text(s: str) -> str:
     return s.replace('"""', "'''").replace("\\", "/")
 
 
-def _header(spec: MapSpec, errors: List[str]) -> str:
+def _header(spec: MapSpec, errors: List[str],
+            profile: Optional[Dict[str, Any]] = None) -> str:
     today = datetime.date.today().isoformat()
     title = _safe_text(spec.layout.title)
     lines = [
@@ -81,6 +89,19 @@ def _header(spec: MapSpec, errors: List[str]) -> str:
         "Edit the CONFIG block below — paths, EPSG, colours — then run.",
         '"""',
     ]
+    if profile:
+        v = profile.get("pro_version")
+        portal = "portal signed in" if profile.get("portal_signed_in") else "NO portal sign-in"
+        lines.append(f"# Matched to your machine (map2arcpy probe): ArcGIS Pro {v}, "
+                     f"{_safe_text(profile.get('license') or '?')} license, {portal}")
+        pv = pro_version(profile)
+        if pv and pv[0] < 3:
+            lines.append(f"# TODO (Pro version): your profile reports Pro {v} — the "
+                         "layout section (createLayout) needs Pro 3.x; the map and "
+                         "geoprocessing parts will still run")
+    else:
+        lines.append("# TIP: run `map2arcpy probe` once in ArcGIS Pro so scripts are "
+                     "matched to your Pro version, licenses and portal")
     for n in spec.notes:
         lines.append(f"# NOTE: {_safe_text(n)}")
     for e in errors:
@@ -88,7 +109,7 @@ def _header(spec: MapSpec, errors: List[str]) -> str:
     return "\n".join(lines)
 
 
-def _config_block(spec: MapSpec) -> str:
+def _config_block(spec: MapSpec, profile: Optional[Dict[str, Any]] = None) -> str:
     lay = spec.layout
     lines = ["", "", "# " + "=" * 74, "# CONFIG — everything you might need to change",
              "# " + "=" * 74, "CONFIG = {"]
@@ -103,7 +124,12 @@ def _config_block(spec: MapSpec) -> str:
                  f"'scale_bar': {lay.scale_bar!r},")
     lines.append(f"    'export': {lay.export!r},")
     lines.append(f"    'extent': {spec.extent!r},  # WGS84 [xmin, ymin, xmax, ymax] or None")
-    lines.append("    'aprx_template': None,  # set to a blank .aprx when running via propy.bat")
+    tpl = ((profile or {}).get("project") or {}).get("path")
+    if tpl:
+        lines.append(f"    'aprx_template': {tpl!r},  # your project, from the Pro profile "
+                     "(used for propy.bat runs)")
+    else:
+        lines.append("    'aprx_template': None,  # set to a blank .aprx when running via propy.bat")
     op_outputs = {op.output for op in spec.operations if op.output}
     lines.append("    'sources': {")
     for l in spec.layers:
@@ -125,8 +151,8 @@ def _src(name_or_path: str, spec: MapSpec) -> str:
     return repr(name_or_path)
 
 
-def _emit_op(op: Operation, spec: MapSpec) -> List[str]:
-    tool = KNOWN_OPS[op.tool]
+def _emit_op(op: Operation, spec: MapSpec, ops_map: Dict[str, str]) -> List[str]:
+    tool = ops_map[op.tool]
     out = op.output or f"{op.tool}_out"
     out_expr = f"os.path.join(results, {out!r})"
     ins = [_src(i, spec) for i in op.inputs]
@@ -164,10 +190,15 @@ def _emit_op(op: Operation, spec: MapSpec) -> List[str]:
     return lines
 
 
-def _emit_layer_add(l: Layer, spec: MapSpec) -> List[str]:
+def _emit_layer_add(l: Layer, spec: MapSpec, basemap_ok: bool = True) -> List[str]:
     lines = [f"    # -- layer: {l.name}"]
     if l.kind == "basemap":
-        lines.append(f"    m.addBasemap({l.source!r})")
+        if basemap_ok:
+            lines.append(f"    m.addBasemap({l.source!r})")
+        else:
+            lines.append(f"    # m.addBasemap({l.source!r})  # commented out: your Pro "
+                         "profile reports no portal sign-in, so this basemap would fail; "
+                         "sign in and uncomment, or re-run `map2arcpy probe`")
         return lines
     op_outputs = {op.output for op in spec.operations if op.output}
     ext = os.path.splitext(l.source.lower())[1] if l.source else ""
@@ -233,7 +264,9 @@ def _emit_layer_add(l: Layer, spec: MapSpec) -> List[str]:
     return lines
 
 
-def _main_block(spec: MapSpec) -> str:
+def _main_block(spec: MapSpec, ops_map: Dict[str, str],
+                profile: Optional[Dict[str, Any]] = None) -> str:
+    basemap_ok = profile is None or bool(profile.get("portal_signed_in"))
     lines = ["", "", "# " + "=" * 74, "# MAIN", "# " + "=" * 74,
              "def _open_project():",
              "    try:",
@@ -261,7 +294,7 @@ def _main_block(spec: MapSpec) -> str:
     if spec.operations:
         lines.append("    # ---- geoprocessing " + "-" * 40)
         for op in spec.operations:
-            lines.extend(_emit_op(op, spec))
+            lines.extend(_emit_op(op, spec, ops_map))
             lines.append("")
 
     lines.append("    # ---- map assembly " + "-" * 41)
@@ -280,7 +313,7 @@ def _main_block(spec: MapSpec) -> str:
             ordered.append(Layer(name=op.output, source="", kind="vector"))
             declared.add(op.output)
     for l in ordered:
-        lines.extend(_emit_layer_add(l, spec))
+        lines.extend(_emit_layer_add(l, spec, basemap_ok))
         lines.append("")
 
     lines.extend([

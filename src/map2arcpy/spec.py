@@ -45,6 +45,15 @@ KNOWN_OPS = {
     "project":      "arcpy.management.Project",
 }
 
+#: pre-Pairwise equivalents, emitted when a Pro profile reports < 2.7
+CLASSIC_OPS = dict(KNOWN_OPS, **{
+    "buffer":    "arcpy.analysis.Buffer",
+    "clip":      "arcpy.analysis.Clip",
+    "dissolve":  "arcpy.management.Dissolve",
+    "intersect": "arcpy.analysis.Intersect",
+    "erase":     "arcpy.analysis.Erase",
+})
+
 
 @dataclass
 class Renderer:

@@ -3,7 +3,7 @@ from .spec import MapSpec, Layer, Operation, Renderer, Layout   # noqa: F401
 from .detect import parse_any, detect_kind                      # noqa: F401
 from .generator import generate                                 # noqa: F401
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 
 def convert(inp: str, strict: bool = False, web: bool = False,
@@ -22,4 +22,5 @@ def convert(inp: str, strict: bool = False, web: bool = False,
             with open(inp, "r", encoding="utf-8-sig") as f:
                 text = f.read()
         _web.enrich(spec, text, out_dir)
-    return generate(spec, strict=strict)
+    from .probe import load_profile
+    return generate(spec, strict=strict, profile=load_profile())

@@ -43,8 +43,12 @@ The layout API (`createLayout` etc.) needs Pro 3.x; symbology classes moved
 between 3.0→3.4. A cryptic `AttributeError` ten seconds into the demo is how
 tools lose GIS users, who rarely file issues — they just leave.
 
-*Now:* `check_pro_version()` warns up front on Pro < 3, and symbology/layout
-helpers already WARN-and-continue instead of crashing. *Still open:* no real
+*Now:* `check_pro_version()` warns up front on Pro < 3, symbology/layout
+helpers WARN-and-continue instead of crashing, and — since v0.7.0 — the
+`map2arcpy probe` handshake makes generation version-aware BEFORE the run:
+classic tools on old Pro, basemaps gated on portal sign-in, aprx_template
+pre-filled from the real project (profile is a snapshot; re-run the probe
+after Pro upgrades). *Still open:* no real
 matrix testing against Pro versions (no licensed runner in CI). **Watch
 signal:** first issue mentioning a Pro version number → stand up a nightly
 job on a licensed Windows machine, or recruit one user per Pro version as a

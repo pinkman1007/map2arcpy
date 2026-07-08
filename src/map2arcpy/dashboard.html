@@ -127,7 +127,8 @@ async function health(){
   try{
     const r = await fetch("/health"); const j = await r.json();
     $("dot").classList.add("ok");
-    $("status").textContent = `v${j.version} · web ${j.web_enabled ? "enabled" : "off (restart with --web)"}`;
+    const prof = j.pro_profile ? ` · ${j.pro_profile}` : " · no Pro profile (run: map2arcpy probe)";
+    $("status").textContent = `v${j.version} · web ${j.web_enabled ? "enabled" : "off (restart with --web)"}${prof}`;
     if(!j.web_enabled){ $("web").disabled = true; $("web").parentElement.style.opacity = .5; }
   }catch(e){
     $("dot").classList.remove("ok");

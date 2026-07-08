@@ -77,11 +77,29 @@ page size — sits in one `CONFIG` dict at the top of the script.
 ## Three commands
 
 ```bash
-map2arcpy generate <input> [-o script.py] [--spec spec.json] [--strict] [--web]
+map2arcpy generate <input> [-o script.py] [--spec spec.json] [--strict] [--web] [--no-profile]
 map2arcpy inspect  <input> [--web]  # show the intermediate MapSpec JSON
 map2arcpy examples [--list|--run NAME]
+map2arcpy probe    [-o probe.py] [--show]   # sync with YOUR ArcGIS Pro (see below)
 map2arcpy serve    [--port 8760] [--web] [--no-browser]   # web dashboard + API
 ```
+
+## Sync with your ArcGIS Pro (`map2arcpy probe`)
+
+Out of the box the generator is blind to the Pro it targets. The probe
+fixes that in one minute: `map2arcpy probe` writes a tiny read-only script;
+run it once inside ArcGIS Pro (Python window or notebook) and it saves a
+machine profile — Pro version, license level, available extensions, portal
+sign-in, the open project — to `~/map2arcpy_data/pro_profile.json`.
+
+Every generation (CLI, API and dashboard) then adapts automatically:
+classic `Buffer`/`Clip` instead of `Pairwise*` on Pro older than 2.7,
+basemaps commented out (not crashing) when no portal is signed in,
+`aprx_template` pre-filled with your real project so `propy.bat` runs work
+unedited, and an up-front warning when the layout section needs a newer Pro
+than yours. `map2arcpy probe --show` displays the saved profile; re-run the
+probe after upgrading Pro or changing licenses. `--no-profile` ignores it
+for one run.
 
 ## Web dashboard (`map2arcpy serve`)
 

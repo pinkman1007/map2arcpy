@@ -44,6 +44,8 @@ def main(argv=None) -> int:
     g.add_argument("--web", action="store_true",
                    help="allow web lookups: geocode places (Nominatim), download "
                         "OSM features (Overpass), find ArcGIS Online layers")
+    g.add_argument("--no-profile", action="store_true",
+                   help="ignore the saved ArcGIS Pro profile (map2arcpy probe)")
 
     i = sub.add_parser("inspect", help="show the MapSpec a given input produces")
     i.add_argument("input")
@@ -53,6 +55,13 @@ def main(argv=None) -> int:
     e = sub.add_parser("examples", help="built-in example descriptions")
     e.add_argument("--list", action="store_true")
     e.add_argument("--run", metavar="NAME", help="generate a script from a named example")
+
+    pr = sub.add_parser("probe", help="sync with ArcGIS Pro: write the one-time "
+                                      "environment probe script")
+    pr.add_argument("-o", "--output", default="map2arcpy_probe.py",
+                    help="where to write the probe script (default: ./map2arcpy_probe.py)")
+    pr.add_argument("--show", action="store_true",
+                    help="show the currently saved profile instead")
 
     s = sub.add_parser("serve", help="run the local API + web dashboard")
     s.add_argument("--host", default="127.0.0.1",
@@ -84,6 +93,8 @@ def main(argv=None) -> int:
                 for x in issues:
                     print(f"#  - {x}", file=sys.stderr)
             return 0
+        if args.cmd == "probe":
+            return _probe(args)
         if args.cmd == "serve":
             from .server import serve
             serve(host=args.host, port=args.port, web=args.web,
@@ -119,13 +130,42 @@ def _enrich(spec, inp: str, out_dir: str) -> None:
     web.enrich(spec, text, out_dir)
 
 
+def _probe(args) -> int:
+    from .probe import probe_script, load_profile, summary, profile_path
+    if args.show:
+        prof = load_profile()
+        if prof:
+            print(f"profile ({profile_path()}):")
+            print("  " + (summary(prof) or ""))
+            print(f"  captured: {prof.get('captured')}")
+        else:
+            print("no profile saved yet — run the probe inside ArcGIS Pro first:",
+                  file=sys.stderr)
+            print("  map2arcpy probe -o map2arcpy_probe.py", file=sys.stderr)
+        return 0
+    with open(args.output, "w", encoding="utf-8") as f:
+        f.write(probe_script())
+    print(f"probe -> {args.output}")
+    print("Now run it ONCE inside ArcGIS Pro (Python window or notebook):")
+    print(f"  exec(open(r'{os.path.abspath(args.output)}').read())")
+    print("After that, every generated script is matched to your Pro "
+          "version, licenses and portal.")
+    return 0
+
+
 def _generate(args) -> int:
     spec = parse_any(args.input)
     if args.web:
         out_dir = (os.path.dirname(os.path.abspath(args.output))
                    if args.output else os.getcwd())
         _enrich(spec, args.input, out_dir)
-    code = generate(spec, strict=args.strict)
+    profile = None
+    if not getattr(args, "no_profile", False):
+        from .probe import load_profile, summary
+        profile = load_profile()
+        if profile:
+            print(f"using Pro profile: {summary(profile)}", file=sys.stderr)
+    code = generate(spec, strict=args.strict, profile=profile)
     if args.spec:
         with open(args.spec, "w", encoding="utf-8") as f:
             f.write(spec.to_json())
