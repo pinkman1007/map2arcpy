@@ -177,6 +177,11 @@ def _emit_op(op: Operation, spec: MapSpec, ops_map: Dict[str, str]) -> List[str]
     elif op.tool == "select":
         where = p.get("where", "1=1")
         lines.append(f"    {out} = {tool}({ins[0]}, {out_expr}, {where!r})[0]")
+    elif op.tool == "multi_buffer":
+        dists = list(p.get("distances", [1, 5, 10]))
+        unit = p.get("unit", "Kilometers")
+        lines.append(f"    {out} = {tool}({ins[0]}, {out_expr},")
+        lines.append(f"        {dists!r}, {unit!r}, 'distance', 'ALL')[0]")
     elif op.tool == "near":
         lines.append(f"    {tool}({ins[0]}, {ins[1]})")
         lines.append(f"    {out} = {ins[0]}  # Near writes NEAR_FID/NEAR_DIST in place")

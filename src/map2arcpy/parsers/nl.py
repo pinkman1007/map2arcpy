@@ -182,6 +182,10 @@ def parse(text: str, name_hint: str = "described map") -> MapSpec:
         spec.layers.append(Layer(name="layer_1", source="TODO_SET_PATH.shp",
                                  kind="vector",
                                  notes=["source not found in description"]))
+
+    # thematic map-type conventions ("carbon map", "eco-sensitive zones", ...)
+    from .. import archetypes
+    archetypes.apply(spec, t)
     return spec
 
 
@@ -239,9 +243,12 @@ def _layer_from_path(p: str) -> Layer:
     kind = "raster" if ext in (".tif", ".tiff", ".img", ".nc", ".asc", ".hgt",
                                ".jp2", ".dem", ".flt", ".bil") else "vector"
     lyr = Layer(name=_basename(p), source=p, kind=kind)
-    default = GEOMETRY_DEFAULTS.get("raster" if kind == "raster" else "polygon")
-    if default:
-        lyr.renderer = Renderer(type="simple", color=default)
+    if kind == "raster":
+        lyr.renderer = Renderer(type="stretch")
+    else:
+        default = GEOMETRY_DEFAULTS.get("polygon")
+        if default:
+            lyr.renderer = Renderer(type="simple", color=default)
     return lyr
 
 

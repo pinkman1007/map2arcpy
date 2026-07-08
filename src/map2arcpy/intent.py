@@ -127,6 +127,13 @@ def apply_intent(spec: MapSpec, text: str) -> MapSpec:
             setattr(spec.layout, key, False)
             applied.append(f"{key}=off")
 
+    # thematic map-type conventions ("carbon map", "eco-sensitive zones", ...)
+    from . import archetypes
+    before = len(spec.notes)
+    archetypes.apply(spec, text)
+    if len(spec.notes) > before:
+        applied.append("archetype")
+
     if applied:
         spec.notes.append("depict instruction applied: " + "; ".join(applied))
     else:

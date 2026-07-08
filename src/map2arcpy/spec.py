@@ -43,6 +43,7 @@ KNOWN_OPS = {
     "select":       "arcpy.analysis.Select",
     "near":         "arcpy.analysis.Near",
     "project":      "arcpy.management.Project",
+    "multi_buffer": "arcpy.analysis.MultipleRingBuffer",
 }
 
 #: pre-Pairwise equivalents, emitted when a Pro profile reports < 2.7
