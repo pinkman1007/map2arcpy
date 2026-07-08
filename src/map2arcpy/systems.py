@@ -222,7 +222,10 @@ def apply(spec: MapSpec, depict_text: str = "") -> MapSpec:
 def _detect_years(spec: MapSpec) -> List[int]:
     yrs = set()
     for l in spec.layers:
-        for m in re.finditer(r"\b(19|20)\d{2}\b", l.name + " " + str(l.source)):
+        # digit-boundaries, not \b — a year after '_' or a letter (rain_2015,
+        # PERSIANN_1y2015) has no word boundary before the digits
+        for m in re.finditer(r"(?<!\d)(?:19|20)\d{2}(?!\d)",
+                             l.name + " " + str(l.source)):
             yrs.add(int(m.group(0)))
     return sorted(yrs)
 

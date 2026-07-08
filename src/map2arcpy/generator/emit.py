@@ -277,6 +277,25 @@ def _emit_layer_add(l: Layer, spec: MapSpec, basemap_ok: bool = True) -> List[st
     return lines
 
 
+def _temporal_raster_pairs(spec: MapSpec):
+    """(year, layer_name) for raster layers whose name/source carries a year —
+    the series the systems-dynamics report classifies at run time."""
+    import re as _re
+    pairs = []
+    for l in spec.layers:
+        if l.kind != "raster":
+            continue
+        m = _re.search(r"(?<!\d)(?:19|20)\d{2}(?!\d)", l.name + " " + str(l.source))
+        if m:
+            pairs.append((int(m.group(0)), l.name))
+    seen, uniq = set(), []
+    for yr, name in sorted(pairs):
+        if name not in seen:
+            uniq.append((yr, name))
+            seen.add(name)
+    return uniq
+
+
 def _main_block(spec: MapSpec, ops_map: Dict[str, str],
                 profile: Optional[Dict[str, Any]] = None) -> str:
     basemap_ok = profile is None or bool(profile.get("portal_signed_in"))
@@ -328,6 +347,15 @@ def _main_block(spec: MapSpec, ops_map: Dict[str, str],
             declared.add(op.output)
     for l in ordered:
         lines.extend(_emit_layer_add(l, spec, basemap_ok))
+        lines.append("")
+
+    # systems-dynamics: temporal raster series -> behaviour archetype at run time
+    sys_pairs = _temporal_raster_pairs(spec)
+    if spec.systems_context and len(sys_pairs) >= 3:
+        lines.append("    # ---- systems dynamics " + "-" * 37)
+        pair_src = ", ".join(f"({yr}, CONFIG['sources'][{name!r}])"
+                             for yr, name in sys_pairs)
+        lines.append(f"    systems_dynamics_report([{pair_src}], work_dir)")
         lines.append("")
 
     lines.extend([

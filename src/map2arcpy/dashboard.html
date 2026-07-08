@@ -158,6 +158,7 @@
     <div class="tabs">
       <button data-tab="script" class="active">Script</button>
       <button data-tab="spec">MapSpec (info)</button>
+      <button data-tab="systems">Systems</button>
       <button data-tab="notes">Notes &amp; TODOs</button>
     </div>
     <div id="tab-script">
@@ -176,6 +177,9 @@
       </div>
       <pre id="spec"># the intermediate MapSpec JSON appears here</pre>
     </div>
+    <div id="tab-systems" hidden><div id="systemsout"><span style="color:var(--dim);font-size:13px">
+      Tick <b>systems analysis</b> and generate — the causal context, loops, and
+      (for a temporal series) the behaviour-archetype hook appear here.</span></div></div>
     <div id="tab-notes" hidden><ul class="notes" id="notes"><li class="info">nothing yet</li></ul></div>
   </section>
 </main>
@@ -230,7 +234,7 @@ function clearFile(){ fileData = null; $("file").value = ""; $("fname").textCont
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
-  for(const t of ["script","spec","notes"]) $("tab-"+t).hidden = (t !== b.dataset.tab);
+  for(const t of ["script","spec","systems","notes"]) $("tab-"+t).hidden = (t !== b.dataset.tab);
 });
 
 // ---- actions --------------------------------------------------------------
@@ -268,7 +272,37 @@ function showNotes(spec, issues){
   (issues||[]).forEach(i => ul.insertAdjacentHTML("beforeend", `<li class="err">issue: ${esc(i)}</li>`));
   if(!ul.children.length) ul.innerHTML = '<li class="info">clean — no notes, no TODOs</li>';
 }
-const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function showSystems(spec){
+  const box = $("systemsout");
+  const ctx = spec.systems_context || [];
+  if(!ctx.length){
+    box.innerHTML = '<span style="color:var(--dim);font-size:13px">No systems '
+      + 'analysis in this result — tick <b>systems analysis</b> and generate again.</span>';
+    return;
+  }
+  let html = '<div style="border-left:3px solid var(--teal);padding-left:12px">';
+  for(const line of ctx){
+    if(line.startsWith("Feedback loops")) html += `<div style="margin-top:8px;color:var(--teal-bright)"><b>${esc(line)}</b></div>`;
+    else if(line.trim().startsWith("-")) html += `<div style="color:var(--dim);font-size:13px;margin-left:8px">${esc(line)}</div>`;
+    else if(/^(This map|Drivers|Data present|Consider|Boundary|Flow discipline|Temporal)/.test(line))
+      html += `<div style="margin-top:6px;font-size:13.5px">${esc(line)}</div>`;
+    else html += `<div style="font-size:13px">${esc(line)}</div>`;
+  }
+  html += "</div>";
+  // if a temporal series was detected, invite the behaviour classification
+  const temporal = ctx.some(l => l.startsWith("Temporal series"));
+  if(temporal){
+    html += '<div style="margin-top:12px;padding:10px;background:var(--panel2);'
+      + 'border:1px solid var(--line);border-radius:8px;font-size:13px">'
+      + '<b style="color:var(--teal-bright)">Behaviour archetype</b><br>'
+      + 'The generated script computes the per-year metric in ArcGIS Pro and prints '
+      + 'the archetype in a SYSTEMS DYNAMICS block (and a systems_dynamics.txt file). '
+      + 'Have the numbers already? Paste them in the “Systems dynamics” panel on the left.</div>';
+  }
+  box.innerHTML = html;
+}
 
 async function call(path, btn){
   const p = payload();
@@ -281,6 +315,7 @@ async function call(path, btn){
     if(!r.ok){ $("msg").textContent = j.error || ("HTTP " + r.status); return; }
     $("spec").textContent = JSON.stringify(j.spec, null, 2);
     showNotes(j.spec, j.issues);
+    showSystems(j.spec);
     if(j.script !== undefined){
       lastScript = j.script; lastName = j.filename || "map_script.py";
       $("script").textContent = j.script;

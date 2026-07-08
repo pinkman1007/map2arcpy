@@ -81,3 +81,46 @@ def test_cli_systems_flag(tmp_path):
     assert "SYSTEMS CONTEXT" in code
     assert "STOCK" in code
     ast.parse(code)
+
+
+def test_temporal_raster_series_wires_dynamics_report():
+    """systems + a year-tagged raster series -> the generated script computes
+    the per-year metric and classifies the archetype at run time."""
+    from map2arcpy.spec import MapSpec, Layer, Renderer
+    spec = MapSpec(crs_epsg=4326, source_kind="zip")
+    for y in (2015, 2016, 2017, 2018):
+        spec.layers.append(Layer(name=f"rain_{y}", source=f"rain_{y}.tif",
+                                 kind="raster", renderer=Renderer(type="stretch")))
+    spec.layout.title = "Annual rainfall 2015-2018"
+    systems.apply(spec, "rainfall map")
+    assert spec.systems_context
+    code = generate(spec, strict=False)
+    ast.parse(code)
+    assert "systems_dynamics_report([" in code
+    assert "(2015, CONFIG['sources']['rain_2015'])" in code
+    # the classifier travels inside the script
+    assert "def classify_series" in code
+    assert "def systems_dynamics_report" in code
+
+
+def test_no_report_without_systems_flag():
+    from map2arcpy.spec import MapSpec, Layer, Renderer
+    spec = MapSpec(crs_epsg=4326, source_kind="zip",
+                   layers=[Layer(name=f"r{y}", source=f"r{y}.tif", kind="raster",
+                                 renderer=Renderer(type="stretch"))
+                           for y in (2015, 2016, 2017)])
+    code = generate(spec, strict=False)          # systems NOT applied
+    assert "systems_dynamics_report([" not in code
+
+
+def test_runtime_classify_series_matches_module():
+    from map2arcpy.generator import runtime
+    from map2arcpy import dynamics
+    import math
+    x = [1000 / (1 + 40 * math.exp(-0.7 * i)) for i in range(18)]
+    r = runtime.classify_series(x)
+    assert r["behaviour"] == "S-curve approaching a limit"
+    assert r["archetype"] == "limits to growth"
+    # agrees with the full module's K within a few percent
+    full = dynamics.classify(x)
+    assert abs(r["K"] - full["indicators"]["carrying_capacity_K"]) / r["K"] < 0.05
