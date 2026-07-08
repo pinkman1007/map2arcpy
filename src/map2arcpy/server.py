@@ -172,6 +172,34 @@ class _Handler(BaseHTTPRequestHandler):
             systems.apply(spec, str(depict or doc.get("input") or ""))
         return spec
 
+    def _dynamics(self, doc):
+        import re as _re
+        from . import dynamics as dyn
+
+        def _nums(s):
+            if isinstance(s, (list, tuple)):
+                return [float(v) for v in s]
+            return [float(v) for v in _re.split(r"[,\s]+", str(s).strip()) if v]
+        try:
+            series = _nums(doc.get("series", ""))
+        except (ValueError, TypeError):
+            self._json({"error": "series must be numbers"}, 400)
+            return
+        if len(series) < 3:
+            self._json({"error": "give at least 3 numbers (one per time epoch)"}, 400)
+            return
+        try:
+            if doc.get("vs"):
+                res = dyn.classify_pair(series, _nums(doc["vs"]))
+            else:
+                times = _nums(doc["times"]) if doc.get("times") else None
+                res = dyn.classify(series, times, kind=doc.get("kind", "stock"))
+        except (ValueError, TypeError) as e:
+            self._json({"error": str(e)}, 400)
+            return
+        res["series"] = series
+        self._json(res)
+
     # -------------------------------------------------------------- handlers
     def do_GET(self):                                         # noqa: N802
         if self.path in ("/", "/index.html"):
@@ -193,7 +221,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):                                        # noqa: N802
-        if self.path not in ("/api/inspect", "/api/generate"):
+        if self.path not in ("/api/inspect", "/api/generate", "/api/dynamics"):
             self._json({"error": "not found"}, 404)
             return
         # CSRF guard: browsers cannot send application/json cross-origin
@@ -206,6 +234,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         doc = self._read_body()
         if doc is None:
+            return
+        if self.path == "/api/dynamics":
+            self._dynamics(doc)
             return
         spec = self._parse(doc)
         if spec is None:

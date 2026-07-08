@@ -126,6 +126,27 @@
       </div>
     </div>
 
+    <div class="card" style="margin-top:18px" id="dyncard">
+      <h2>Systems dynamics — behaviour archetype</h2>
+      <div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">
+        Paste a stock over time (e.g. built-up area or carbon per year, from
+        zonal stats in Pro) — it fits the curve and names the archetype
+        (Limits to Growth, Overshoot, …).
+      </div>
+      <input type="text" id="dyn_series" class="stin"
+             placeholder="120, 165, 225, 300, 385, 470, 545, 600, 635, 655, 665">
+      <div class="row" style="margin-top:8px">
+        <label class="chk">kind
+          <select id="dyn_kind" class="stin" style="width:auto;display:inline-block">
+            <option value="stock">stock</option><option value="problem">problem</option>
+          </select></label>
+        <input type="text" id="dyn_vs" class="stin" style="flex:1"
+               placeholder="optional: second series for success-to-successful / escalation">
+        <button id="dyn_go">Classify</button>
+      </div>
+      <div id="dyn_out" style="margin-top:10px"></div>
+    </div>
+
     <div class="card" style="margin-top:18px">
       <h2>Examples</h2>
       <div class="examples" id="examples"><span style="color:var(--dim);font-size:13px">loading…</span></div>
@@ -272,6 +293,55 @@ async function call(path, btn){
   }catch(e){ $("msg").textContent = "request failed: " + e; }
   finally{ btn.disabled = false; btn.textContent = btn === $("btnGen") ? "Generate script" : "Inspect spec"; }
 }
+// ---- systems-dynamics panel --------------------------------------------
+function sparkline(series, w=280, h=54){
+  const n = series.length, mn = Math.min(...series), mx = Math.max(...series);
+  const rng = (mx - mn) || 1, pad = 4;
+  const pts = series.map((v,i) => {
+    const x = pad + i*(w-2*pad)/(n-1);
+    const y = h - pad - (v-mn)/rng*(h-2*pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const dots = series.map((v,i) => {
+    const x = pad + i*(w-2*pad)/(n-1);
+    const y = h - pad - (v-mn)/rng*(h-2*pad);
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="#6fc3d2"/>`;
+  }).join("");
+  return `<svg width="${w}" height="${h}" style="background:var(--panel2);border:1px solid var(--line);border-radius:6px">
+    <polyline points="${pts}" fill="none" stroke="#4c9aa8" stroke-width="2"/>${dots}</svg>`;
+}
+$("dyn_go").onclick = async () => {
+  const raw = $("dyn_series").value.trim();
+  const series = raw.split(/[,\s]+/).map(Number).filter(v=>!isNaN(v));
+  if(series.length < 3){ $("dyn_out").innerHTML = '<span style="color:var(--warn)">need at least 3 numbers</span>'; return; }
+  const body = { series, kind: $("dyn_kind").value };
+  const vs = $("dyn_vs").value.trim();
+  if(vs) body.vs = vs.split(/[,\s]+/).map(Number).filter(v=>!isNaN(v));
+  $("dyn_go").disabled = true; $("dyn_go").textContent = "…";
+  try{
+    const r = await fetch("/api/dynamics", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if(!r.ok){ $("dyn_out").innerHTML = `<span style="color:var(--err)">${esc(j.error||"error")}</span>`; return; }
+    let html = "";
+    if(!vs) html += sparkline(series);
+    const arche = j.archetypes ? j.archetypes.join(", ") : (j.archetype || "—");
+    html += `<div style="margin-top:8px;font-size:14px">
+      <div><b style="color:var(--teal-bright)">${esc(j.behaviour||"")}</b></div>
+      <div style="color:var(--dim)">archetype: ${esc(arche)}</div>`;
+    if(j.indicators && Object.keys(j.indicators).length){
+      html += '<div style="margin-top:6px;font:12.5px var(--mono)">' +
+        Object.entries(j.indicators).map(([k,v])=>`${esc(k)} = ${esc(String(v))}`).join("<br>") + "</div>";
+    }
+    if(j.math) html += `<div style="margin-top:6px;font-size:12px;color:var(--dim)">${esc(j.math)}</div>`;
+    if(j.structure) html += `<div style="margin-top:6px;font-size:12px;color:var(--dim)">${esc(j.structure)}</div>`;
+    if(j.caveat) html += `<div style="margin-top:8px;font-size:11.5px;color:var(--warn)">⚠ ${esc(j.caveat)}</div>`;
+    html += "</div>";
+    $("dyn_out").innerHTML = html;
+  }catch(e){ $("dyn_out").innerHTML = `<span style="color:var(--err)">request failed: ${esc(String(e))}</span>`; }
+  finally{ $("dyn_go").disabled = false; $("dyn_go").textContent = "Classify"; }
+};
+
 $("btnGen").onclick = () => call("/api/generate", $("btnGen"));
 $("btnInspect").onclick = () => call("/api/inspect", $("btnInspect"));
 $("btnClear").onclick = () => { $("input").value = ""; $("localpath").value = ""; clearFile(); $("msg").textContent = ""; };

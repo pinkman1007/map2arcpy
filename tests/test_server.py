@@ -133,3 +133,26 @@ def test_non_json_content_type_rejected():
     except urllib.error.HTTPError as e:
         code = e.code
     assert code == 415
+
+
+def test_dynamics_endpoint_classifies():
+    import math as _m
+    x = [1000/(1+40*_m.exp(-0.7*i)) for i in range(18)]
+    status, j = _post("/api/dynamics", {"series": x})
+    assert status == 200
+    assert j["behaviour"] == "S-curve approaching a limit"
+    assert "limits to growth" in j["archetypes"]
+    assert j["series"][0] == x[0]
+
+
+def test_dynamics_endpoint_accepts_string_and_pair():
+    status, j = _post("/api/dynamics", {"series": "40,90,150,180,160,110,60"})
+    assert status == 200 and j["behaviour"] == "overshoot then decline"
+    status, j = _post("/api/dynamics",
+                      {"series": [10,22,40,70,120], "vs": [10,12,14,16,18]})
+    assert status == 200 and j["archetype"] == "success to the successful"
+
+
+def test_dynamics_endpoint_rejects_short_series():
+    status, j = _post("/api/dynamics", {"series": "1,2"})
+    assert status == 400 and "at least 3" in j["error"]
