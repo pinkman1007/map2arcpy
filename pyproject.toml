@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "map2arcpy"
-version = "0.18.0"
+version = "0.23.0"
 description = "Rule-based AI that converts any map — a plain-English description, an ArcGIS project (.aprx/.lyrx/.mapx), spatial data (GeoJSON/shapefile/web map), or a georeferenced image — into an executable, standalone ArcGIS Pro (arcpy) Python script."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -42,6 +42,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 map2arcpy = ["dashboard.html"]
+"map2arcpy.recipes" = ["*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

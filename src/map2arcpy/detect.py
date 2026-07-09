@@ -5,7 +5,7 @@ import json
 import os
 
 from .spec import MapSpec
-from .parsers import nl, cim, data, image, archive
+from .parsers import nl, cim, data, image, archive, steps
 
 _CIM_EXT = (".aprx", ".lyrx", ".mapx")
 _DATA_EXT = (".geojson", ".shp", ".gpkg", ".kml", ".kmz", ".gpx", ".csv",
@@ -74,5 +74,9 @@ def parse_any(inp: str) -> MapSpec:
         with open(inp, "r", encoding="utf-8-sig") as f:
             text = f.read()
         hint = os.path.splitext(os.path.basename(inp))[0]
+        if steps.looks_like_steps(text):       # a numbered/bulleted recipe file
+            return steps.parse(text, name_hint=hint)
         return nl.parse(text, name_hint=hint)
+    if steps.looks_like_steps(inp):            # pasted step-by-step recipe
+        return steps.parse(inp)
     return nl.parse(inp)

@@ -44,7 +44,17 @@ KNOWN_OPS = {
     "near":         "arcpy.analysis.Near",
     "project":      "arcpy.management.Project",
     "multi_buffer": "arcpy.analysis.MultipleRingBuffer",
+    # raster analysis (Spatial Analyst — the generated script checks it out)
+    "cell_statistics": "arcpy.sa.CellStatistics",   # MEAN/SUM/MAX/... over rasters
+    "slope":           "arcpy.sa.Slope",
+    "hillshade":       "arcpy.sa.Hillshade",
+    "euc_distance":    "arcpy.sa.EucDistance",
+    "zonal_stats":     "arcpy.sa.ZonalStatisticsAsTable",
 }
+
+#: raster-analysis ops (need Spatial Analyst; outputs are rasters/tables)
+RASTER_OPS = ("cell_statistics", "slope", "hillshade", "euc_distance",
+              "zonal_stats")
 
 #: pre-Pairwise equivalents, emitted when a Pro profile reports < 2.7
 CLASSIC_OPS = dict(KNOWN_OPS, **{

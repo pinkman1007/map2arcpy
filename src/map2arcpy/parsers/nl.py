@@ -50,7 +50,7 @@ _DPI_RE = re.compile(r"\b(\d{2,4})\s*dpi\b", re.I)
 _TITLE_RE = re.compile(r"""\btitled?\s+["']([^"']+)["']""", re.I)
 _GRAD_RE = re.compile(
     r"\b(?:choropleth|graduated|classified|colou?r(?:ed)?\s+by|shade[d]?\s+by|heat\s*map)\b"
-    r"(?:\s*(?:map\s+)?(?:of|by|on)?\s+([A-Za-z_][\w ]{0,40}?))?(?=[,.;]|\s+(?:using|with|in|on)\b|$)",
+    r"(?:\s*(?:map\s+)?(?:of|by|on)?\s+([A-Za-z_][\w ]{0,40}?))?(?=[,.;]|\s+(?:using|with|in|on|from|over|against)\b|$)",
     re.I,
 )
 _UNIQ_RE = re.compile(
@@ -67,6 +67,28 @@ _BUFFER_RE = re.compile(r"\bbuffer(?:ed|ing)?\b", re.I)
 _CLIP_RE = re.compile(r"\bclip(?:ped|ping)?\s+(?:it\s+|them\s+)?to\s+", re.I)
 _ERASE_RE = re.compile(r"\berase\s+(.+?)\s+from\s+(.+?)(?:[,.;]|$)", re.I)
 _NO_SURROUND_RE = r"\b(?:no|without(?:\s+(?:a|the|any))?)\s+%s\b"
+
+# ---- raster analysis (Spatial Analyst) --------------------------------------
+_STATS_WORDS = {"average": "MEAN", "mean": "MEAN", "sum": "SUM", "total": "SUM",
+                "maximum": "MAXIMUM", "max": "MAXIMUM",
+                "minimum": "MINIMUM", "min": "MINIMUM"}
+_CELLSTAT_RE = re.compile(
+    r"\b(?:(decadal|annual|monthly|period)\s+)?"
+    r"(average|mean|sum|total|maximum|max|minimum|min)\s+of\s+"
+    r"""(?:"([^"]+)"|'([^']+)'|([\w:/\\.\-*?]+))""", re.I)
+_SLOPE_RE = re.compile(r"\bslope\b", re.I)
+_HILLSHADE_RE = re.compile(r"\bhillshade\b", re.I)
+_EUCDIST_RE = re.compile(r"\b(?:euclidean\s+)?distance\s+(?:to|from)\s+", re.I)
+_ZONAL_RE = re.compile(r"\bzonal\s+stat(?:istic)?s?\s+of\s+"
+                       r"""(?:"([^"]+)"|(\S+))\s+(?:by|per|across)\s+"""
+                       r"""(?:"([^"]+)"|(\S+))""", re.I)
+_RASTER_EXTS = (".tif", ".tiff", ".img", ".asc", ".hgt", ".jp2", ".dem",
+                ".flt", ".bil", ".nc")
+
+
+def _is_rasterish(tok: str) -> bool:
+    low = tok.lower()
+    return low.endswith(_RASTER_EXTS) or "*" in tok or "?" in tok
 
 
 def parse(text: str, name_hint: str = "described map") -> MapSpec:
@@ -148,6 +170,54 @@ def parse(text: str, name_hint: str = "described map") -> MapSpec:
                                          output="selected",
                                          params={"where": m.group(1).strip()}))
 
+    # ---- raster analysis (Spatial Analyst) ---------------------------------
+    m = _CELLSTAT_RE.search(t)
+    if m:
+        period = (m.group(1) or "").lower()
+        stat = _STATS_WORDS[m.group(2).lower()]
+        target = next(g for g in m.groups()[2:] if g)
+        if _is_rasterish(target) or os.path.isdir(target):
+            out_name = ((period + "_") if period else "") + \
+                       ("average" if stat == "MEAN" else stat.lower())
+            params = {"stat": stat}
+            if "*" in target or "?" in target or os.path.isdir(target):
+                params["pattern"] = target      # expanded at run time
+            spec.operations.append(Operation(
+                tool="cell_statistics", inputs=[target],
+                output=out_name, params=params))
+            current = out_name
+    if _SLOPE_RE.search(low) or _HILLSHADE_RE.search(low):
+        dem = next((l.name for l in spec.layers if l.kind == "raster"), None)
+        if dem is None:
+            spec.notes.append("slope/hillshade requested but no raster (DEM) "
+                              "found in the description — name one, e.g. "
+                              "'slope from dem.tif'")
+        else:
+            if _SLOPE_RE.search(low):
+                spec.operations.append(Operation(tool="slope", inputs=[dem],
+                                                 output="slope_surface"))
+                current = "slope_surface"
+            if _HILLSHADE_RE.search(low):
+                spec.operations.append(Operation(tool="hillshade", inputs=[dem],
+                                                 output="hillshade_surface"))
+    m = _EUCDIST_RE.search(t)
+    if m:
+        near_path = _first_path_after(t, m.end())
+        src_name = _basename(near_path) if near_path else current
+        spec.operations.append(Operation(tool="euc_distance", inputs=[src_name],
+                                         output="distance_surface"))
+        current = "distance_surface"
+    m = _ZONAL_RE.search(t)
+    if m:
+        val = next(g for g in (m.group(1), m.group(2)) if g)
+        zones = next(g for g in (m.group(3), m.group(4)) if g)
+        val_n = _basename(val) if _is_rasterish(val) or "." in val else val
+        zon_n = _basename(zones) if "." in zones else zones
+        spec.operations.append(Operation(
+            tool="zonal_stats", inputs=[zon_n, val_n], output="zonal_table",
+            params={"stat": "MEAN",
+                    "zone_field": "TODO_ZONE_FIELD"}))
+
     # ---- symbology on the "final" layer -------------------------------------
     final_layer = _final_layer(spec)
     g = _GRAD_RE.search(t)
@@ -193,6 +263,9 @@ def parse(text: str, name_hint: str = "described map") -> MapSpec:
                                  kind="vector",
                                  notes=["source not found in description"]))
 
+    # analysis-chain methodology (which toolboxes/analyses make this product)
+    from .. import chains
+    chains.apply(spec, t)
     # thematic map-type conventions ("carbon map", "eco-sensitive zones", ...)
     from .. import archetypes
     archetypes.apply(spec, t)
@@ -228,7 +301,10 @@ def _paths(t: str) -> List[str]:
     for m in _PATH_RE.finditer(t):
         p = next(g for g in m.groups() if g)
         # quoted strings are only data if they look like data — a quoted
-        # TITLE must not become a layer
+        # TITLE must not become a layer; a wildcard is a raster-SET for
+        # cell_statistics, not a loadable layer
+        if "*" in p or "?" in p:
+            continue
         if _looks_like_data(p) and p not in out:
             out.append(p)
     for m in _GDB_RE.finditer(t):
@@ -302,13 +378,19 @@ def _ramp(low: str) -> Optional[str]:
 def _final_layer(spec: MapSpec) -> Optional[Layer]:
     """The layer symbology applies to: the last op output if any, else the
     last data layer. Creates a Layer entry for the op output if missing."""
+    from ..spec import RASTER_OPS
     if spec.operations:
-        out = next((o.output for o in reversed(spec.operations) if o.output), None)
-        if out:
+        last = next((o for o in reversed(spec.operations)
+                     if o.output and o.tool != "zonal_stats"), None)
+        if last:
             for l in spec.layers:
-                if l.name == out:
+                if l.name == last.output:
                     return l
-            lyr = Layer(name=out, source="", kind="vector")
+            if last.tool in RASTER_OPS:          # raster analysis output
+                lyr = Layer(name=last.output, source="", kind="raster",
+                            renderer=Renderer(type="stretch"))
+            else:
+                lyr = Layer(name=last.output, source="", kind="vector")
             spec.layers.append(lyr)
             return lyr
     for l in reversed(spec.layers):

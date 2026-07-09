@@ -1,0 +1,8 @@
+# LULC map — one colour per land-use / land-cover class
+# Replace lulc.shp with your classified LULC polygons; CLASS_NAME with the class field.
+1. load lulc.shp
+2. unique values by CLASS_NAME
+3. LULC map
+4. titled 'Land Use / Land Cover'
+5. A3 landscape
+6. export pdf at 300 dpi

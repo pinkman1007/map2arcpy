@@ -18,7 +18,7 @@ import datetime
 import os
 from typing import Any, Dict, List, Optional
 
-from ..spec import MapSpec, Layer, Operation, KNOWN_OPS, CLASSIC_OPS
+from ..spec import MapSpec, Layer, Operation, Renderer, KNOWN_OPS, CLASSIC_OPS
 from ..probe import use_classic_tools, pro_version
 from .runtime import runtime_source
 
@@ -112,7 +112,10 @@ def _header(spec: MapSpec, errors: List[str],
             lines.append("# " + _safe_text(sc))
         lines.append("#")
     for n in spec.notes:
-        lines.append(f"# NOTE: {_safe_text(n)}")
+        if "NOT UNDERSTOOD" in n:              # a recipe step we couldn't parse
+            lines.append(f"# TODO (step): {_safe_text(n)}")
+        else:
+            lines.append(f"# NOTE: {_safe_text(n)}")
     for e in errors:
         lines.append(f"# TODO (spec issue): {_safe_text(e)}")
     return "\n".join(lines)
@@ -132,6 +135,8 @@ def _config_block(spec: MapSpec, profile: Optional[Dict[str, Any]] = None) -> st
     lines.append(f"    'legend': {lay.legend!r}, 'north_arrow': {lay.north_arrow!r}, "
                  f"'scale_bar': {lay.scale_bar!r},")
     lines.append(f"    'export': {lay.export!r},")
+    lines.append("    'outputs_to_active_map': True,  # also add analysis outputs "
+                 "as layers on the map YOU have open")
     lines.append(f"    'extent': {spec.extent!r},  # WGS84 [xmin, ymin, xmax, ymax] or None")
     tpl = ((profile or {}).get("project") or {}).get("path")
     if tpl:
@@ -196,7 +201,10 @@ def _emit_op(op: Operation, spec: MapSpec, ops_map: Dict[str, str]) -> List[str]
     out_expr = f"os.path.join(results, {out!r})"
     ins = [_src(i, spec) for i in op.inputs]
     p = op.params
-    lines = [f"    # -- {op.tool} -> {out}"]
+    lines = []
+    if p.get("step"):                          # recipe mode: banner per step
+        lines.append(f"    # ==== {_safe_text(p['step'])} " + "=" * 10)
+    lines.append(f"    # -- {op.tool} -> {out}")
     if op.tool == "buffer":
         dist = p.get("distance", "500 Meters")
         lines.append(f"    {out} = {tool}({ins[0]}, {out_expr}, {dist!r},")
@@ -228,6 +236,38 @@ def _emit_op(op: Operation, spec: MapSpec, ops_map: Dict[str, str]) -> List[str]
         epsg = p.get("epsg", spec.crs_epsg)
         lines.append(f"    {out} = {tool}({ins[0]}, {out_expr}, "
                      f"arcpy.SpatialReference({int(epsg)}))[0]")
+    elif op.tool == "cell_statistics":
+        stat = p.get("stat", "MEAN")
+        lines.append("    need_sa()")
+        if p.get("pattern"):                    # wildcard / folder of rasters
+            lines.append(f"    _in = expand_rasters({p['pattern']!r})")
+        else:
+            lines.append(f"    _in = expand_rasters([{', '.join(ins)}])")
+        lines.append(f"    arcpy.sa.CellStatistics(_in, {stat!r}, 'DATA')"
+                     f".save({out_expr})")
+        lines.append(f"    {out} = {out_expr}")
+    elif op.tool == "slope":
+        lines.append("    need_sa()")
+        lines.append(f"    arcpy.sa.Slope({ins[0]}, "
+                     f"{p.get('unit', 'DEGREE')!r}).save({out_expr})")
+        lines.append(f"    {out} = {out_expr}")
+    elif op.tool == "hillshade":
+        lines.append("    need_sa()")
+        lines.append(f"    arcpy.sa.Hillshade({ins[0]}, "
+                     f"{int(p.get('azimuth', 315))}, "
+                     f"{int(p.get('altitude', 45))}).save({out_expr})")
+        lines.append(f"    {out} = {out_expr}")
+    elif op.tool == "euc_distance":
+        lines.append("    need_sa()")
+        lines.append(f"    arcpy.sa.EucDistance({ins[0]}).save({out_expr})")
+        lines.append(f"    {out} = {out_expr}")
+    elif op.tool == "zonal_stats":
+        lines.append("    need_sa()")
+        lines.append(f"    arcpy.sa.ZonalStatisticsAsTable({ins[0]}, "
+                     f"{p.get('zone_field', 'OBJECTID')!r}, {ins[1]}, {out_expr},")
+        lines.append(f"        statistics_type={p.get('stat', 'MEAN')!r})")
+        lines.append(f"    {out} = {out_expr}")
+        lines.append(f"    log('zonal statistics table -> ' + {out_expr})")
     else:  # pragma: no cover — KNOWN_OPS is the gate
         lines.append(f"    # TODO: emit call for {tool}")
     lines.append(f"    log('{op.tool} done -> ' + str({out}))")
@@ -365,6 +405,7 @@ def _main_block(spec: MapSpec, ops_map: Dict[str, str],
 
     lines.append("    # ---- map assembly " + "-" * 41)
     lines.append("    aprx = _open_project()")
+    lines.append("    user_map = active_map(aprx)   # captured BEFORE the fresh map")
     lines.append("    # build in a FRESH map — never mutate the user's existing maps")
     lines.append("    m = fresh_map(aprx, 'map2arcpy - ' + CONFIG['title'])")
     lines.append("")
@@ -373,10 +414,18 @@ def _main_block(spec: MapSpec, ops_map: Dict[str, str],
     ordered = [l for l in spec.layers if l.kind == "basemap"] + \
               [l for l in spec.layers if l.kind != "basemap"]
     # layers produced by operations but not declared explicitly:
+    from ..spec import RASTER_OPS  # noqa: local to avoid cycle at module load
     declared = {l.name for l in spec.layers}
     for op in spec.operations:
         if op.output and op.output not in declared:
-            ordered.append(Layer(name=op.output, source="", kind="vector"))
+            if op.tool == "zonal_stats":
+                continue                        # a table, not a map layer
+            if op.tool in RASTER_OPS:
+                ordered.append(Layer(
+                    name=op.output, source="", kind="raster",
+                    renderer=Renderer(type="stretch")))
+            else:
+                ordered.append(Layer(name=op.output, source="", kind="vector"))
             declared.add(op.output)
     for l in ordered:
         lines.extend(_emit_layer_add(l, spec, basemap_ok))
@@ -391,6 +440,15 @@ def _main_block(spec: MapSpec, ops_map: Dict[str, str],
         lines.append(f"    systems_dynamics_report([{pair_src}], work_dir)")
         lines.append("")
 
+    out_layer_names = [op.output for op in spec.operations
+                       if op.output and op.tool != "zonal_stats"]
+    if out_layer_names:
+        lines.extend([
+            "    # ---- analysis outputs -> the user's OWN open map " + "-" * 10,
+            "    if CONFIG.get('outputs_to_active_map'):",
+            f"        copy_outputs_to(user_map, m, {out_layer_names!r})",
+            "",
+        ])
     lines.extend([
         "    # ---- layout + export " + "-" * 38,
         "    layout = build_layout(aprx, m, CONFIG)",
@@ -403,10 +461,16 @@ def _main_block(spec: MapSpec, ops_map: Dict[str, str],
         "    render_report()",
         "    show_in_pro(aprx, m, layout)",
         "    log('ALL DONE')",
+        "    write_run_report(work_dir, success=True)",
         "",
         "",
         "if __name__ == '__main__':",
-        "    main()",
+        "    try:",
+        "        main()",
+        "    except BaseException as _e:",
+        "        write_run_report(os.path.dirname(os.path.abspath(__file__))",
+        "                         or os.getcwd(), success=False, error=_e)",
+        "        raise",
         "",
     ])
     return "\n".join(lines)

@@ -160,9 +160,13 @@ class _Handler(BaseHTTPRequestHandler):
         if not depict and (doc.get("path") or doc.get("file")):
             depict = doc.get("input")              # text box + file = intent
         if isinstance(depict, str) and depict.strip() \
-                and spec.source_kind != "natural-language":
-            from .intent import apply_intent
-            apply_intent(spec, depict)
+                and spec.source_kind not in ("natural-language", "steps"):
+            from .parsers import steps as steps_mod
+            if steps_mod.looks_like_steps(depict):
+                steps_mod.apply_recipe(spec, depict)   # numbered recipe + data
+            else:
+                from .intent import apply_intent
+                apply_intent(spec, depict)
         st = doc.get("style")
         if isinstance(st, dict) and st:
             from .style import apply_style
@@ -217,12 +221,15 @@ class _Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/examples":
             from .cli import _EXAMPLES
             self._json(_EXAMPLES)
+        elif self.path == "/api/recipes":
+            from . import recipes
+            self._json(recipes.catalog())
         else:
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):                                        # noqa: N802
         if self.path not in ("/api/inspect", "/api/generate", "/api/dynamics",
-                             "/api/discover"):
+                             "/api/discover", "/api/plan", "/api/doctor"):
             self._json({"error": "not found"}, 404)
             return
         # CSRF guard: browsers cannot send application/json cross-origin
@@ -239,6 +246,10 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/api/dynamics":
             self._dynamics(doc)
             return
+        if self.path == "/api/doctor":
+            from .doctor import diagnose
+            self._json(diagnose(str(doc.get("log") or "")))
+            return
         spec = self._parse(doc)
         if spec is None:
             return
@@ -250,13 +261,24 @@ class _Handler(BaseHTTPRequestHandler):
                         "source_kind": spec.source_kind,
                         "layers": [l.name for l in spec.layers if l.kind != "basemap"]})
             return
+        if self.path == "/api/plan":
+            from .plan import describe
+            from .probe import load_profile as _lp
+            instruction = bool(str(doc.get("input") or doc.get("depict") or "").strip())
+            self._json(describe(spec, instruction_given=instruction,
+                                profile=_lp()))
+            return
         if self.path == "/api/inspect":
             self._json({"spec": spec.to_dict(), "issues": issues})
             return
         from .probe import load_profile
         try:
-            code = generate(spec, strict=bool(doc.get("strict")),
-                            profile=load_profile())
+            if doc.get("target") == "geopandas":
+                from .generator.emit_gpd import generate_gpd
+                code = generate_gpd(spec, strict=bool(doc.get("strict")))
+            else:
+                code = generate(spec, strict=bool(doc.get("strict")),
+                                profile=load_profile())
         except ValueError as e:                               # strict-mode failure
             self._json({"error": str(e), "issues": issues}, 422)
             return

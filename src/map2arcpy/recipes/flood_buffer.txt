@@ -1,0 +1,10 @@
+# Flood-risk buffer — riverside hazard zone around drains/rivers
+# Replace rivers.shp with your drainage/river lines and wards.shp with the study area.
+1. load rivers.shp
+2. buffer rivers.shp by 100 m
+3. clip to wards.shp
+4. flood map
+5. on a light gray basemap
+6. titled 'Flood Risk Buffer Zone'
+7. A3 landscape
+8. export pdf at 300 dpi

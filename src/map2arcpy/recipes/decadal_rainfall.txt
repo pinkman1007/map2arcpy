@@ -1,0 +1,7 @@
+# Decadal average rainfall — Cell Statistics MEAN over the annual rasters
+# Replace the wildcard with your rasters (all must share CRS and cell grid).
+1. decadal average of "C:\GIS\rain\rain_20*.tif"
+2. rainfall map
+3. titled 'Decadal Average Rainfall 2011-2020'
+4. A3 landscape
+5. export pdf at 300 dpi

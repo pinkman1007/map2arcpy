@@ -1,0 +1,8 @@
+# Ward choropleth — population density by administrative ward
+# Replace wards.shp with your ward polygons (any vector format works).
+1. load wards.shp
+2. choropleth of pop_density using greens
+3. label by ward_name
+4. titled 'Population Density by Ward'
+5. A4 portrait
+6. export pdf at 300 dpi

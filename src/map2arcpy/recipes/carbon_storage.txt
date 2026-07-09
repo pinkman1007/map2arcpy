@@ -1,0 +1,8 @@
+# Carbon-storage map — biomass / carbon stock surface (InVEST-style)
+# Replace carbon.tif with your carbon-density raster.
+1. load carbon.tif
+2. carbon storage map
+3. using greens
+4. titled 'Carbon Storage'
+5. A3 landscape
+6. export pdf at 300 dpi

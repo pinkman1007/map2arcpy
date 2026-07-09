@@ -100,6 +100,15 @@ def suggest(spec: MapSpec, profile: Optional[Dict[str, Any]] = None) -> List[Dic
                       f"time series map {y0}-{y1}",
                       systems=True,
                       why=f"{len(years)} year-tagged rasters form a temporal series"))
+    if len(years) >= 2 and sa:
+        y0, y1 = years[0], years[-1]
+        out.append(_s(f"Period-average surface ({y0}-{y1})",
+                      f"Cell Statistics MEAN over the {len(years)} epochs — "
+                      "the decadal/period average map",
+                      f"{'decadal ' if len(years) >= 9 else ''}average rainfall map",
+                      requires="Spatial Analyst",
+                      why=f"{len(years)} year-tagged rasters support a period "
+                          "average (the MEAN op is added automatically)"))
     # a change map needs only TWO epochs (its canonical case) — offer it
     # whenever >=2 year-tagged rasters exist and Spatial Analyst is available
     if len(years) >= 2 and sa:

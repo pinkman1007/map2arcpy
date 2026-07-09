@@ -40,6 +40,22 @@ map2arcpy generate wards.geojson -o wards_map.py
 # from a whole project package
 map2arcpy generate project.aprx -o rebuild.py
 
+# from a step-by-step recipe file (each line runs in order; also paste-able
+# into the dashboard input box)
+#   1. load wards.shp
+#   2. clip to district_boundary.shp
+#   3. choropleth of pop_density
+#   4. titled 'Dense Wards', A3 landscape
+map2arcpy generate recipe.txt -o dense_wards.py
+
+# from a SHIPPED recipe — standard map products, ready to run
+map2arcpy recipes                              # list them
+map2arcpy recipes flood_buffer -o flood.py     # generate one
+
+# NO ArcGIS license? emit an open-source GeoPandas/matplotlib script instead
+map2arcpy generate recipe.txt --target geopandas -o dense_wards.py
+# then: pip install geopandas matplotlib mapclassify && python dense_wards.py
+
 # with web lookups: real OSM data, geocoded extent, auto UTM zone
 map2arcpy generate "hospitals from osm in Visakhapatnam, titled 'Health Access'" --web -o health.py
 ```
@@ -52,7 +68,8 @@ page size — sits in one `CONFIG` dict at the top of the script.
 
 | input | what happens |
 |---|---|
-| plain English (`"choropleth of population from wards.geojson…"`) | a regex grammar extracts sources, operations (buffer/clip/dissolve/select/spatial-join…), colours & ramps, CRS, page, export format |
+| plain English (`"choropleth of population from wards.geojson…"`) | a regex grammar extracts sources, operations (buffer/clip/dissolve/select/spatial-join…), colours & ramps, CRS, page, export format — **the full vocabulary is documented in [docs/GRAMMAR.md](docs/GRAMMAR.md)** |
+| a **step-by-step recipe** (numbered/bulleted lines, pasted or in a `.txt`) | each line is parsed with the same grammar and applied **in order** to the growing map — later steps see earlier results (a step-3 choropleth lands on the step-2 clip output). The script gets a `# ==== STEP n ====` banner per operation and a step-by-step account in its header; steps the grammar can't parse get a deterministic *did you mean …?* suggestion and become explicit `# TODO (step)` markers, never silently dropped. Works alone or alongside an attached data file (the steps then drive your data) |
 | `.lyrx` / `.mapx` / `.aprx` | the CIM JSON is parsed: data connections, definition queries, label fields, and unique-value / class-breaks / simple renderers are carried over faithfully, colours and all |
 | `.geojson` / `.shp` / `.gpkg` | the data is profiled (geometry types, attribute fields — shapefile via pure-stdlib header+`.dbf`+`.prj`, GeoPackage via stdlib `sqlite3`) and sensible cartography is proposed: numeric field → choropleth, low-cardinality text → categories |
 | `.kml` / `.kmz` / `.gpx` / `.csv` | placemark/waypoint census (ElementTree) or coordinate-column sniffing; the script converts at run time (KMLToLayer, GPXtoFeatures, XYTableToPoint) |
@@ -62,6 +79,26 @@ page size — sits in one `CONFIG` dict at the top of the script.
 | CAD (`.dxf`/`.dwg`/`.dgn`) | added as a native CAD dataset with sub-layer addressing notes (CAD carries no CRS — the script flags it) |
 | `.zip` archives | extracted to a sibling `_unzipped/` folder and every supported dataset inside is parsed and merged into one map — a zipped shapefile from a data portal "just works", preview images inside are ignored |
 | a saved MapSpec `.json` | regenerated exactly — the IR is the contract |
+
+## Why map2arcpy when ArcGIS Pro has an AI assistant?
+
+Esri's Pro assistant (beta, Pro 3.6+) is a cloud LLM: it needs an ArcGIS
+Online/Enterprise sign-in, an org that has enabled it, and a live connection —
+and like any LLM its answers vary between runs. map2arcpy is the opposite
+tool by design:
+
+* **Deterministic** — the same input produces the same script, every time.
+  You can put the script in a report appendix and defend it.
+* **Offline** — no sign-in, no cloud, nothing leaves the machine. Works on
+  air-gapped and strict-IT government workstations where cloud assistants
+  are blocked by policy.
+* **Complete** — a whole production script from data through geoprocessing,
+  symbology, layout and export, not a code snippet to assemble yourself.
+* **Honest** — anything it can't parse becomes a visible `# TODO`, never
+  confidently-wrong code.
+
+Use both if you like: the assistant for exploratory one-liners inside Pro,
+map2arcpy for reproducible, auditable map production.
 
 ## The honest bits
 
@@ -166,13 +203,36 @@ pytest
 
 The whole test suite (parsers, generator, CLI) runs without ArcGIS Pro.
 
+## The open-source backend (`--target geopandas`)
+
+The same MapSpec compiles to a **GeoPandas + matplotlib** script — no Esri
+license needed to run the output, anywhere Python runs:
+
+* all 12 geoprocessing ops translated (buffer auto-projects to a metric UTM
+  CRS; SQL where-clauses become pandas queries, with an honest WARN when a
+  clause doesn't translate)
+* graduated (mapclassify schemes) / unique-value / single-colour symbology,
+  the same named ramps, labels, title, legend, north arrow, scale bar, export
+* optional extras degrade gracefully: contextily (web basemaps), rasterio
+  (raster layers) — a note, never a crash
+* unlike arcpy scripts, this backend is **executed in CI against real data**
+  on every push — the generated map is verified, not just parsed
+
 ## Roadmap
 
 * raster geoprocessing ops (zonal stats, reclassify, hillshade)
+* a PyQGIS target (same MapSpec, QGIS project output)
 * `.pyt` Python-toolbox output so it runs from the Geoprocessing pane
 * `--web` for data inputs too (enrich a bare shapefile with OSM context layers)
 * optional LLM adapter for free-form descriptions beyond the grammar —
   strictly as a *front-end* that emits the same auditable MapSpec
+
+## Support this project
+
+map2arcpy is free and MIT-licensed. If it saves you time, you can support
+its development via the **Sponsor** button on GitHub — or, for
+organizations, paid setup/training/priority support is available from the
+author (open an issue to get in touch).
 
 ## License
 

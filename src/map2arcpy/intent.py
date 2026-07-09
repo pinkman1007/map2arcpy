@@ -84,16 +84,25 @@ def apply_intent(spec: MapSpec, text: str) -> MapSpec:
                 op.inputs.insert(0, target.name)
         spec.operations.append(op)
         applied.append(f"op:{op.tool}")
+    from .spec import RASTER_OPS
     declared = {l.name for l in spec.layers}
     last_out: Optional[str] = None
     for op in spec.operations:
         if op.output:
-            last_out = op.output
+            if op.tool != "zonal_stats":         # zonal output is a table
+                last_out = op.output
             if op.output not in declared:
-                spec.layers.append(Layer(
-                    name=op.output, source="", kind="vector",
-                    renderer=Renderer(type="simple",
-                                      color=GEOMETRY_DEFAULTS["polygon"])))
+                if op.tool == "zonal_stats":
+                    continue
+                if op.tool in RASTER_OPS:
+                    spec.layers.append(Layer(
+                        name=op.output, source="", kind="raster",
+                        renderer=Renderer(type="stretch")))
+                else:
+                    spec.layers.append(Layer(
+                        name=op.output, source="", kind="vector",
+                        renderer=Renderer(type="simple",
+                                          color=GEOMETRY_DEFAULTS["polygon"])))
                 declared.add(op.output)
 
     # ---- symbology / labels straight from the instruction text ------------
@@ -114,6 +123,21 @@ def apply_intent(spec: MapSpec, text: str) -> MapSpec:
         elif nl._color(low):
             sym_target.renderer = Renderer(type="simple", color=nl._color(low))
             applied.append(f"colour on '{sym_target.name}'")
+    # a bare named ramp ("using greens") recolours the target's existing
+    # renderer — stretch rasters and graduated vectors alike
+    ramp_name = nl._ramp(low)
+    if ramp_name:
+        from .palettes import RAMPS
+        recoloured = []
+        for l in ([sym_target] if sym_target is not None else []) + \
+                [x for x in spec.layers if x is not sym_target]:
+            if l is not None and l.renderer.type in ("stretch", "graduated"):
+                l.renderer.ramp = list(RAMPS[ramp_name])
+                l.renderer.ramp_name = ramp_name
+                recoloured.append(l.name)
+        if recoloured:
+            applied.append(f"ramp={ramp_name} on {', '.join(recoloured)}")
+
     lab = nl._LABEL_RE.search(text)
     if lab and sym_target is not None:
         sym_target.label_field = lab.group(1)
@@ -146,6 +170,12 @@ def apply_intent(spec: MapSpec, text: str) -> MapSpec:
         if re.search(nl._NO_SURROUND_RE % key.replace("_", r"\s+"), low):
             setattr(spec.layout, key, False)
             applied.append(f"{key}=off")
+
+    # analysis-chain methodology (which toolboxes/analyses make this product)
+    from . import chains
+    chain_applied = chains.apply(spec, text)
+    if chain_applied:
+        applied.append("analysis: " + "; ".join(chain_applied))
 
     # thematic map-type conventions ("carbon map", "eco-sensitive zones", ...)
     from . import archetypes

@@ -13,6 +13,7 @@ pipelines.
 """
 # --- BEGIN RUNTIME (map2arcpy) ---
 import os
+import glob
 import datetime
 
 try:
@@ -26,15 +27,68 @@ PAGES = {"A4P": (21.0, 29.7), "A4L": (29.7, 21.0), "A3P": (29.7, 42.0),
          "A3L": (42.0, 29.7), "LetterP": (21.6, 27.9), "LetterL": (27.9, 21.6)}
 
 
+_EVENTS = []                       # every log line, for the run report
+
+
 def log(msg, level="INFO"):
     ts = datetime.datetime.now().strftime("%H:%M:%S")
-    print("[%s] %-5s| %s" % (ts, level, msg))
+    line = "[%s] %-5s| %s" % (ts, level, msg)
+    print(line)
+    _EVENTS.append(line)
     if _HAS_ARCPY and level in ("WARN", "ERROR"):
         (arcpy.AddWarning if level == "WARN" else arcpy.AddError)(msg)
 
 
+def write_run_report(work_dir, success, error=None):
+    """A machine-readable sidecar of everything the run logged — feed it to
+    the dashboard's Log Doctor for a diagnosis."""
+    import json as _json
+    rep = {"generator": "map2arcpy", "success": bool(success),
+           "finished": datetime.datetime.now().isoformat(timespec="seconds"),
+           "events": list(_EVENTS)}
+    if error:
+        rep["error"] = str(error)
+    try:
+        p = os.path.join(work_dir, "run_report.json")
+        with open(p, "w", encoding="utf-8") as f:
+            _json.dump(rep, f, indent=1)
+        log("run report -> %s (paste into the dashboard's Log Doctor)" % p)
+    except Exception as e:                     # noqa: BLE001
+        log("run report not written: %s" % e, "WARN")
+
+
 def banner(title):
     print("\n" + "=" * 72 + "\n " + title + "\n" + "=" * 72)
+
+
+def need_sa():
+    """Check out Spatial Analyst, or stop with a clear message."""
+    if not _HAS_ARCPY:
+        raise RuntimeError("arcpy not available")
+    if arcpy.CheckExtension("Spatial") != "Available":
+        raise SystemExit(
+            "This analysis needs the Spatial Analyst extension, which is not "
+            "available on this machine (ArcGIS Pro -> Settings -> Licensing).")
+    arcpy.CheckOutExtension("Spatial")
+    log("Spatial Analyst checked out")
+
+
+def expand_rasters(pattern_or_list):
+    """A wildcard ('C:/rain/rain_20*.tif'), a folder, or an explicit list ->
+    sorted list of raster paths. Fails loudly when nothing matches."""
+    if isinstance(pattern_or_list, (list, tuple)):
+        out = list(pattern_or_list)
+    elif os.path.isdir(pattern_or_list):
+        out = sorted(glob.glob(os.path.join(pattern_or_list, "*.tif"))) or \
+              sorted(glob.glob(os.path.join(pattern_or_list, "*")))
+    else:
+        out = sorted(glob.glob(str(pattern_or_list)))
+    if not out:
+        raise SystemExit("no rasters matched: %r" % (pattern_or_list,))
+    log("%d raster(s): %s%s" % (len(out), ", ".join(
+        os.path.basename(str(p)) for p in out[:6]),
+        " ..." if len(out) > 6 else ""))
+    return out
 
 
 def hex_to_rgb(h):
@@ -663,6 +717,41 @@ def systems_dynamics_report(pairs, work_dir, metric="raster mean"):
     except Exception as e:
         log("systems sidecar not written: %s" % e, "WARN")
     return res
+
+
+def active_map(aprx):
+    """The map the user currently has open in Pro (None when headless)."""
+    try:
+        return aprx.activeMap
+    except Exception:
+        return None
+
+
+def copy_outputs_to(user_map, built_map, names):
+    """Copy the analysis-output layers — symbology included — onto the map
+    the user already has open, so results land in THEIR Contents pane, not
+    only on the script's own map."""
+    if user_map is None:
+        log("no active map detected (headless run?) — outputs are on the "
+            "script's map only")
+        return
+    if getattr(user_map, "name", None) == getattr(built_map, "name", None):
+        return
+    wanted = set(names)
+    added = 0
+    for l in built_map.listLayers():
+        if l.name in wanted:
+            try:
+                user_map.addLayer(l, "TOP")
+                added += 1
+                log("output layer '%s' added to your open map '%s'"
+                    % (l.name, user_map.name))
+            except Exception as e:                     # noqa: BLE001
+                log("could not add '%s' to your open map: %s" % (l.name, e),
+                    "WARN")
+    if not added and wanted:
+        log("no output layers were copied to the active map (%s)"
+            % ", ".join(sorted(wanted)), "WARN")
 
 
 def show_in_pro(aprx, the_map, layout=None):

@@ -1,0 +1,10 @@
+# Hazard hotspots — select and highlight high-risk polygons
+# Replace zones.shp with your hazard polygons; RISK with your risk-score field.
+1. load zones.shp
+2. select where "RISK > 3"
+3. hazard risk map
+4. choropleth of RISK using reds
+5. label by ZONE_NAME
+6. titled 'High Hazard Zones'
+7. A4 landscape
+8. export pdf at 300 dpi

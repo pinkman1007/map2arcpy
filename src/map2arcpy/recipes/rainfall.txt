@@ -1,0 +1,8 @@
+# Rainfall surface — continuous precipitation raster
+# Replace rainfall.tif with your precipitation raster (IMD/PERSIANN grids work).
+1. load rainfall.tif
+2. rainfall map
+3. using blues
+4. titled 'Annual Rainfall'
+5. A4 portrait
+6. export pdf at 300 dpi

@@ -1,0 +1,8 @@
+# Terrain map — slope + hillshade derived from a DEM (Spatial Analyst)
+# Replace dem.tif with your elevation raster (SRTM .hgt also works).
+1. load dem.tif
+2. terrain slope hillshade map from dem.tif
+3. using viridis
+4. titled 'Terrain: Slope over Hillshade'
+5. A3 landscape
+6. export pdf at 300 dpi

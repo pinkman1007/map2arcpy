@@ -42,6 +42,9 @@ def main(argv=None) -> int:
     g.add_argument("--spec", default=None, help="also write the intermediate MapSpec JSON here")
     g.add_argument("--strict", action="store_true",
                    help="fail on spec problems instead of embedding TODOs")
+    g.add_argument("--target", choices=["arcpy", "geopandas"], default="arcpy",
+                   help="script backend: arcpy (ArcGIS Pro, default) or "
+                        "geopandas (open-source — no Esri license needed)")
     g.add_argument("--web", action="store_true",
                    help="allow web lookups: geocode places (Nominatim), download "
                         "OSM features (Overpass), find ArcGIS Online layers")
@@ -82,6 +85,13 @@ def main(argv=None) -> int:
     e = sub.add_parser("examples", help="built-in example descriptions")
     e.add_argument("--list", action="store_true")
     e.add_argument("--run", metavar="NAME", help="generate a script from a named example")
+
+    rc = sub.add_parser("recipes", help="ready-to-run step-by-step recipes for "
+                                        "standard map products")
+    rc.add_argument("name", nargs="?", help="recipe name (omit to list them)")
+    rc.add_argument("-o", "--output", default=None,
+                    help="generate the recipe's script here (else the recipe "
+                         "text is printed for you to edit)")
 
     dy = sub.add_parser("dynamics", help="classify a time series against the "
                                          "systems-dynamics behaviour archetypes")
@@ -152,6 +162,26 @@ def main(argv=None) -> int:
             from .server import serve
             serve(host=args.host, port=args.port, web=args.web,
                   open_browser=not args.no_browser)
+            return 0
+        if args.cmd == "recipes":
+            from . import recipes
+            if not args.name:
+                for n in recipes.list_recipes():
+                    print(f"{n:20s} {recipes.describe(n)}")
+                print("\nmap2arcpy recipes <name>          # print it (edit the paths)")
+                print("map2arcpy recipes <name> -o s.py  # generate its script now")
+                return 0
+            text = recipes.get(args.name)
+            if not args.output:
+                print(text)
+                return 0
+            from .parsers import steps as steps_mod
+            code = generate(steps_mod.parse(text, name_hint=args.name),
+                            strict=False)
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(code)
+            print(f"script -> {args.output}  (edit the CONFIG paths to your "
+                  "data, then run in ArcGIS Pro)", file=sys.stderr)
             return 0
         if args.cmd == "examples":
             if args.run:
@@ -255,7 +285,11 @@ def _generate(args) -> int:
         profile = load_profile()
         if profile:
             print(f"using Pro profile: {summary(profile)}", file=sys.stderr)
-    code = generate(spec, strict=args.strict, profile=profile)
+    if getattr(args, "target", "arcpy") == "geopandas":
+        from .generator.emit_gpd import generate_gpd
+        code = generate_gpd(spec, strict=args.strict)
+    else:
+        code = generate(spec, strict=args.strict, profile=profile)
     if args.spec:
         with open(args.spec, "w", encoding="utf-8") as f:
             f.write(spec.to_json())

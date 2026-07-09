@@ -68,7 +68,7 @@
   <section>
     <div class="card">
       <h2>1 · Describe or upload a map</h2>
-      <textarea id="input" placeholder="Describe a map from scratch — or attach data below AND write here what it should depict, e.g.:&#10;  choropleth of pop_density, label by ward_name, select where &quot;pop_density > 50&quot;, titled 'Dense Wards', A3 landscape&#10;&#10;With --web:  hospitals from osm in Visakhapatnam, titled 'Health Access'"></textarea>
+      <textarea id="input" placeholder="Describe a map in one line — or paste a NUMBERED RECIPE and each step runs in order, e.g.:&#10;  1. load wards.shp&#10;  2. clip to district_boundary.shp&#10;  3. choropleth of pop_density&#10;  4. label by ward_name&#10;  5. titled 'Dense Wards', A3 landscape&#10;&#10;Also works with data attached below (the steps drive the uploaded data).&#10;With --web:  hospitals from osm in Visakhapatnam, titled 'Health Access'"></textarea>
       <div class="filebox" id="drop">
         <label>
           <input type="file" id="file" accept=".zip,.aprx,.lyrx,.mapx,.geojson,.json,.txt,.tif,.tiff,.png,.jpg,.jpeg,.pdf,.shp,.gpkg,.kml,.kmz,.gpx,.csv,.dxf,.dwg,.dgn,.nc,.asc,.agr,.flt,.bil,.hgt,.jp2,.ecw,.sid,.dem,.img">
@@ -87,6 +87,11 @@
         <label class="chk"><input type="checkbox" id="web"> use web (geocode / OSM / AGOL)</label>
         <label class="chk"><input type="checkbox" id="systems"> systems analysis (causal drivers, loops)</label>
         <label class="chk"><input type="checkbox" id="strict"> strict (fail on TODOs)</label>
+        <label class="chk">target
+          <select id="target" class="stin" style="width:auto;display:inline-block;margin-top:0">
+            <option value="arcpy">arcpy (ArcGIS Pro)</option>
+            <option value="geopandas">geopandas (open-source)</option>
+          </select></label>
       </div>
       <div class="row">
         <button id="btnGen">Generate script</button>
@@ -94,8 +99,30 @@
         <button id="btnInspect" class="ghost">Inspect spec</button>
         <button id="btnClear" class="ghost">Clear</button>
       </div>
+      <div id="compose" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
       <div id="msg"></div>
       <div id="discover"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px" id="plancard" hidden>
+      <h2>Plan — what I understood <span class="pill" id="planstate"></span></h2>
+      <div id="planchecks" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
+      <div id="planwarn"></div>
+      <ol id="planlist" style="margin:6px 0 4px 18px;padding:0;font-size:13.5px"></ol>
+      <div id="planmethods" style="font-size:12px;color:var(--dim)"></div>
+      <div id="plandata" style="margin-top:8px;font-size:12.5px;color:var(--dim)"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px" id="doctorcard">
+      <h2>Log doctor — how did the run go?</h2>
+      <div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">
+        Paste the ArcGIS Pro Python-window output (or the contents of the
+        <code>run_report.json</code> written next to the script) and get a
+        diagnosis: what worked, what each warning means, the one-line fix.
+      </div>
+      <textarea id="doctor_in" style="min-height:90px" placeholder="[10:41:03] INFO | Spatial Analyst checked out&#10;[10:41:09] WARN | field 'pop_densty' not found on 'wards' ...&#10;...&#10;— or paste run_report.json —"></textarea>
+      <div class="row"><button id="doctor_go">Diagnose</button></div>
+      <div id="doctor_out" style="margin-top:8px"></div>
     </div>
 
     <div class="card" style="margin-top:18px">
@@ -163,6 +190,14 @@
         <button id="dyn_go">Classify</button>
       </div>
       <div id="dyn_out" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>Recipes — standard map products</h2>
+      <div style="font-size:12.5px;color:var(--dim);margin-bottom:6px">
+        Click one to load its steps, swap in your data names, Generate.
+      </div>
+      <div class="examples" id="recipes"><span style="color:var(--dim);font-size:13px">loading…</span></div>
     </div>
 
     <div class="card" style="margin-top:18px">
@@ -235,6 +270,19 @@ fetch("/api/examples").then(r=>r.json()).then(ex=>{
   }
 }).catch(()=>{ $("examples").textContent = "unavailable"; });
 
+// ---- recipes -------------------------------------------------------------
+fetch("/api/recipes").then(r=>r.json()).then(rc=>{
+  const box = $("recipes"); box.innerHTML = "";
+  for(const [k,v] of Object.entries(rc)){
+    const b = document.createElement("button"); b.className="ghost";
+    b.textContent = k.replace(/_/g," ");
+    b.title = v.title;
+    b.onclick = () => { $("input").value = v.text; clearFile();
+                        $("msg").textContent = "recipe loaded — swap in your data names, then Generate"; };
+    box.appendChild(b);
+  }
+}).catch(()=>{ $("recipes").textContent = "unavailable"; });
+
 // ---- file attach --------------------------------------------------------
 $("file").addEventListener("change", () => {
   const f = $("file").files[0];
@@ -242,7 +290,7 @@ $("file").addEventListener("change", () => {
   const rd = new FileReader();
   rd.onload = () => {
     fileData = { name: f.name, content_b64: rd.result.split(",",2)[1] };
-    $("fname").innerHTML = `attached: <b>${f.name}</b> (${(f.size/1024).toFixed(0)} KB) — this overrides the text box`;
+    $("fname").innerHTML = `attached: <b>${f.name}</b> (${(f.size/1024).toFixed(0)} KB) — the text box above now drives THIS data (e.g. 'decadal average rainfall map')`;
   };
   rd.readAsDataURL(f);
 });
@@ -279,11 +327,14 @@ function styleObj(){
 }
 function payload(){
   const p = { web: $("web").checked, strict: $("strict").checked,
-              systems: $("systems").checked };
+              systems: $("systems").checked, target: $("target").value };
   const lp = $("localpath").value.trim();
   if(lp) p.path = lp;                       // local path wins: read in place
   else if(fileData) p.file = fileData;
-  else p.input = $("input").value.trim();
+  // the text box ALWAYS rides along: alone it IS the map description; with
+  // data attached it becomes the instruction driving that data (depict/recipe)
+  const txt = $("input").value.trim();
+  if(txt) p.input = txt;
   const st = styleObj();
   if(Object.keys(st).length) p.style = st;
   return p;
@@ -444,6 +495,121 @@ function loadSuggestion(s){
   $("msg").textContent = "loaded — click Generate script to build it";
   $("input").scrollIntoView({behavior:"smooth", block:"center"});
 }
+
+// ---- live plan: "what I understood", BEFORE generating -------------------
+let _planTimer = null, _planSeq = 0;
+function schedulePlan(){ clearTimeout(_planTimer); _planTimer = setTimeout(updatePlan, 700); }
+async function updatePlan(){
+  const p = payload();
+  const hasAny = p.path || p.file || p.input;
+  if(!hasAny){ $("plancard").hidden = true; return; }
+  const seq = ++_planSeq;
+  $("plancard").hidden = false; $("planstate").textContent = "thinking…";
+  try{
+    const r = await fetch("/api/plan", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(p)});
+    const j = await r.json();
+    if(seq !== _planSeq) return;                 // a newer plan superseded this one
+    if(!r.ok){ $("planstate").textContent = "—";
+      $("planwarn").innerHTML = `<div style="color:var(--warn);font-size:13px">${esc(j.error||"could not plan")}</div>`;
+      $("planlist").innerHTML = ""; $("plandata").innerHTML = ""; $("planmethods").innerHTML = ""; return; }
+    $("planstate").textContent = j.will_analyse ? "analysis + map" : "display only";
+    const CK = {ok:"#4caf7d", warn:"#e0b64f", na:"#8aa3ab"};
+    $("planchecks").innerHTML = (j.checks||[]).map(c =>
+      `<span title="${esc(c.detail)}" style="border:1px solid ${CK[c.status]||CK.na};
+        color:${CK[c.status]||CK.na};border-radius:14px;padding:2px 10px;font-size:11.5px">
+        ${c.status==="ok"?"●":c.status==="warn"?"▲":"○"} ${esc(c.name)}</span>`).join("");
+    $("planwarn").innerHTML = (j.warnings||[]).map(w =>
+      `<div style="background:#3a2f16;border:1px solid var(--warn);border-radius:8px;
+       padding:6px 10px;margin:4px 0;color:var(--warn);font-size:12.5px">⚠ ${esc(w)}</div>`).join("");
+    $("planlist").innerHTML = (j.intentions||[]).map(i => {
+      const isA = i.startsWith("ANALYSE:");
+      return `<li style="margin:3px 0;${isA?"color:var(--teal-bright);font-weight:600":""}">${esc(i)}</li>`;
+    }).join("");
+    $("planmethods").innerHTML = (j.methods||[]).map(m =>
+      `<div style="border-left:3px solid var(--teal);padding-left:10px;margin-top:6px">${esc(m)}</div>`).join("");
+    const d = j.data || {};
+    _planData = d;                               // feeds the compose chips
+    let dh = "";
+    if((d.layers||[]).length){
+      dh += `<b style="color:var(--text)">Your data:</b> ${d.n_rasters||0} raster(s), ${d.n_vectors||0} vector(s)`;
+      if(d.years) dh += ` · years ${d.years[0]}–${d.years[d.years.length-1]} (${d.years.length} epochs)`;
+      dh += "<br>" + d.layers.slice(0, 14).map(l => {
+        let s = `<span class="pill">${esc(l.name)}${l.year?(" · "+l.year):""}</span>`;
+        if(l.fields) s += " fields: " + l.fields.slice(0,8).map(f =>
+          `<a href="#" class="fld" data-f="${esc(f)}" style="margin-right:4px">${esc(f)}</a>`).join("");
+        return s;
+      }).join(" ");
+    }
+    $("plandata").innerHTML = dh;
+    document.querySelectorAll("#plandata a.fld").forEach(a => a.onclick = (e) => {
+      e.preventDefault();
+      const box = $("input");
+      box.value = (box.value ? box.value + " " : "") + a.dataset.f;
+      box.focus(); schedulePlan();
+    });
+  }catch(e){ if(seq === _planSeq) $("planstate").textContent = "server unreachable"; }
+}
+$("input").addEventListener("input", schedulePlan);
+$("localpath").addEventListener("input", schedulePlan);
+$("file").addEventListener("change", () => setTimeout(schedulePlan, 300));
+$("btnClear").addEventListener("click", () => { $("plancard").hidden = true; $("compose").innerHTML = ""; });
+
+// ---- smart compose: context-aware chips under the input box ---------------
+let _planData = null;               // fields/layers from the last /api/plan
+const VERB_CHIPS = ["choropleth of ", "unique values by ", "label by ",
+  "buffer ", "clip to ", "dissolve by ", 'select where "', "average of ",
+  "decadal average rainfall map", "slope from ", "distance to ",
+  "titled '", "A3 landscape", "using blues", "export pdf at 300 dpi"];
+function composeChips(){
+  const box = $("input");
+  const upto = box.value.slice(0, box.selectionStart ?? box.value.length);
+  const line = upto.split("\n").pop().replace(/^\s*(?:\d+[.):]|[-*•])\s*/, "");
+  let chips = [];
+  const d = _planData || {};
+  const fields = (d.layers||[]).flatMap(l => l.fields||[]);
+  const layers = (d.layers||[]).map(l => l.name);
+  if(/(choropleth of|unique values by|label by|dissolve by|graduated by)\s*\w*$/i.test(line) && fields.length){
+    chips = fields.slice(0, 12);
+  } else if(/(clip to|buffer|erase|distance to|intersect|merge)\s*\w*$/i.test(line) && layers.length){
+    chips = layers.slice(0, 12);
+  } else if(line.trim() === "" || /^\d*\s*$/.test(line)){
+    chips = VERB_CHIPS;
+  }
+  $("compose").innerHTML = chips.map(c =>
+    `<button class="ghost" style="font-size:11.5px;padding:3px 9px" data-c="${esc(c)}">${esc(c)}</button>`).join("");
+  document.querySelectorAll("#compose button").forEach(b => b.onclick = () => {
+    const v = b.dataset.c;
+    box.value = box.value + (box.value && !box.value.endsWith(" ") && !box.value.endsWith("\n") ? " " : "") + v;
+    box.focus(); composeChips(); schedulePlan();
+  });
+}
+$("input").addEventListener("input", composeChips);
+$("input").addEventListener("focus", composeChips);
+
+// ---- log doctor ------------------------------------------------------------
+$("doctor_go").onclick = async () => {
+  const txt = $("doctor_in").value.trim();
+  if(!txt){ $("doctor_out").innerHTML = '<span style="color:var(--warn);font-size:13px">paste the run output first</span>'; return; }
+  $("doctor_go").disabled = true; $("doctor_go").textContent = "…";
+  try{
+    const r = await fetch("/api/doctor", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify({log: txt})});
+    const j = await r.json();
+    const col = j.success === true ? "var(--ok)" : j.success === false ? "var(--err)" : "var(--warn)";
+    const SEV = {error:"var(--err)", warn:"var(--warn)", info:"var(--dim)", good:"var(--ok)"};
+    let h = `<div style="font-size:14px;font-weight:600;color:${col}">${esc(j.summary)}</div>`;
+    (j.findings||[]).forEach(f => {
+      h += `<div style="margin-top:7px;padding:7px 10px;background:var(--panel2);
+        border-left:3px solid ${SEV[f.severity]||"var(--dim)"};border-radius:6px;font-size:12.5px">
+        <b style="color:${SEV[f.severity]}">${esc(f.severity.toUpperCase())}</b> ${esc(f.what)}
+        ${f.fix?`<div style="color:var(--teal-bright);margin-top:3px">fix: ${esc(f.fix)}</div>`:""}
+        <div style="color:var(--dim);font:11px var(--mono);margin-top:3px">${esc(f.line)}</div></div>`;
+    });
+    $("doctor_out").innerHTML = h;
+  }catch(e){ $("doctor_out").innerHTML = `<span style="color:var(--err)">request failed: ${esc(String(e))}</span>`; }
+  finally{ $("doctor_go").disabled = false; $("doctor_go").textContent = "Diagnose"; }
+};
 
 $("btnGen").onclick = () => call("/api/generate", $("btnGen"));
 $("btnInspect").onclick = () => call("/api/inspect", $("btnInspect"));

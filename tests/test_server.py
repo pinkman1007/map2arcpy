@@ -156,3 +156,63 @@ def test_dynamics_endpoint_accepts_string_and_pair():
 def test_dynamics_endpoint_rejects_short_series():
     status, j = _post("/api/dynamics", {"series": "1,2"})
     assert status == 400 and "at least 3" in j["error"]
+
+
+def test_recipe_in_input_box_generates_stepped_script():
+    recipe = ("1. load wards.shp\n2. clip to district_boundary.shp\n"
+              "3. choropleth of pop_density\n4. titled 'Dense Wards', A3 landscape")
+    status, j = _post("/api/generate", {"input": recipe})
+    assert status == 200
+    ast.parse(j["script"])
+    assert j["spec"]["source_kind"] == "steps"
+    assert "# ==== STEP 2: clip to district_boundary.shp" in j["script"]
+    assert j["filename"] == "dense_wards.py"
+
+
+def test_recipe_with_uploaded_data_drives_the_data():
+    with open(os.path.join(EXAMPLES, "wards.geojson"), "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    recipe = ("1. choropleth of pop_density\n2. label by ward_name\n"
+              "3. titled 'Recipe On Data'")
+    status, j = _post("/api/generate", {
+        "file": {"name": "wards.geojson", "content_b64": b64},
+        "input": recipe})
+    assert status == 200
+    ast.parse(j["script"])
+    assert j["spec"]["layout"]["title"] == "Recipe On Data"
+    assert any(n.startswith("STEP 1 ok") for n in j["spec"]["notes"])
+
+
+def test_dashboard_always_sends_the_text_box():
+    """Regression: the dashboard must send the input text ALONGSIDE an
+    attached file/path (it silently discarded it before v0.21.1, so
+    'data + instruction' never reached the server from the browser)."""
+    import os as _os
+    html = open(_os.path.join(_os.path.dirname(__file__), "..", "src",
+                              "map2arcpy", "dashboard.html"),
+                encoding="utf-8").read()
+    assert "else p.input" not in html          # the discarding pattern
+    assert "if(txt) p.input = txt" in html     # the ride-along pattern
+
+
+def test_plan_endpoint_states_analysis_and_warns_on_display_only():
+    recipe = ('1. decadal average of "C:/GIS/rain/rain_20*.tif"\n'
+              "2. rainfall map\n3. titled 'Decadal', A3 landscape")
+    status, j = _post("/api/plan", {"input": recipe})
+    assert status == 200 and j["will_analyse"] is True
+    assert any(i.startswith("ANALYSE: Cell Statistics MEAN") for i in j["intentions"])
+    # data attached with an empty instruction -> loud display-only warning
+    with open(os.path.join(EXAMPLES, "wards.geojson"), "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    status, j = _post("/api/plan", {"file": {"name": "wards.geojson",
+                                             "content_b64": b64}})
+    assert status == 200 and j["will_analyse"] is False
+    assert any("NO INSTRUCTION" in w for w in j["warnings"])
+
+
+def test_doctor_endpoint():
+    status, j = _post("/api/doctor", {"log": "[1] INFO | ALL DONE\n"
+                                             "[1] INFO | EXPORT OK -> x.pdf (900 KB)"})
+    assert status == 200 and j["success"] is True
+    status, j = _post("/api/doctor", {"log": "FileNotFoundError: Missing inputs:"})
+    assert status == 200 and j["success"] is False

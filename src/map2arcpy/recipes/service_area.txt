@@ -1,0 +1,10 @@
+# Service-area map — walkability rings around facilities
+# Replace hospitals.shp with your facility points and wards.shp with the study boundary.
+1. load hospitals.shp
+2. buffer hospitals.shp by 500 m
+3. clip to wards.shp
+4. on streets
+5. titled 'Hospital Service Areas'
+6. EPSG:32644
+7. A4 landscape
+8. export pdf at 300 dpi
