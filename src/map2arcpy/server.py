@@ -29,12 +29,14 @@ import re
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import __version__
 from .detect import parse_any
 from .generator import generate
 from .spec import MapSpec
+from .parsers import nl
+from . import hermes_ai
 
 MAX_BODY = 64 * 1024 * 1024
 DEFAULT_PORT = 8760
@@ -204,6 +206,216 @@ class _Handler(BaseHTTPRequestHandler):
         res["series"] = series
         self._json(res)
 
+    def _enhance_description(self, doc: Dict[str, Any]) -> None:
+        """Enhance a natural language map description with GIS best practices using Hermes AI."""
+        description = doc.get("description", "").strip()
+        if not description:
+            self._json({"error": "description is required"}, 400)
+            return
+
+        context = {
+            "web_enabled": doc.get("context", {}).get("web_enabled", self.web_enabled),
+            "target": doc.get("context", {}).get("target", "arcpy")
+        }
+
+        # Use Hermes AI for enhancement
+        try:
+            result = hermes_ai.enhance_description(description, context)
+        except Exception as e:
+            # Fallback to rule-based enhancement
+            result = hermes_ai._fallback_enhance(description, context)
+            result["fallback"] = True
+            result["fallback_reason"] = str(e)
+        self._json(result)
+
+    def _suggest_improvements(self, doc: Dict[str, Any]) -> None:
+        """Analyze a MapSpec and suggest improvements using Hermes AI."""
+        spec_dict = doc.get("spec")
+        if not spec_dict:
+            self._json({"error": "spec is required"}, 400)
+            return
+
+        context = doc.get("context", {})
+
+        # Use Hermes AI for analysis
+        try:
+            result = hermes_ai.suggest_improvements(spec_dict, context)
+        except Exception as e:
+            # Fallback to rule-based analysis
+            result = hermes_ai._fallback_analyze(spec_dict, context.get("web_enabled", self.web_enabled))
+            result["fallback"] = True
+            result["fallback_reason"] = str(e)
+        self._json(result)
+
+    def _chat(self, doc: Dict[str, Any]) -> None:
+        """Conversational chat endpoint with Hermes AI - maintains context across turns."""
+        messages = doc.get("messages", [])
+        context = doc.get("context", {})
+        
+        if not messages:
+            self._json({"error": "messages array required"}, 400)
+            return
+        
+        # Build system prompt with context
+        system_parts = [
+            "You are Hermes, an expert GIS cartographer and ArcPy developer.",
+            "You help users create, refine, and debug map2arcpy maps through conversation.",
+            "",
+            "Current context:"
+        ]
+        
+        if context.get("description"):
+            system_parts.append(f"- Map description: {context['description']}")
+        
+        if context.get("spec"):
+            spec = context["spec"]
+            layer_names = [l.get("name") for l in spec.get("layers", []) if l.get("kind") != "basemap"]
+            ops = [op.get("tool") for op in spec.get("operations", [])]
+            crs = spec.get("crs_epsg", 4326)
+            layout = spec.get("layout", {})
+            system_parts.append(f"- Layers: {', '.join(layer_names) if layer_names else 'none'}")
+            system_parts.append(f"- Operations: {', '.join(ops) if ops else 'none'}")
+            system_parts.append(f"- CRS: EPSG:{crs}")
+            system_parts.append(f"- Layout: {layout.get('title', 'Untitled')}, {layout.get('page', 'auto')}, {layout.get('dpi', 300)}dpi")
+        
+        if context.get("script"):
+            # Truncate script for context
+            script_preview = context["script"][:3000]
+            system_parts.append(f"- Current script (truncated):\n{script_preview}")
+        
+        system_parts.extend([
+            "",
+            "Guidelines:",
+            "- Be concise and practical",
+            "- Suggest specific map2arcpy syntax (e.g., 'graduated by pop_density, classify=quantile, classes=5')",
+            "- Can return updated description, spec, or script in JSON response",
+            "- If user asks for changes, provide the updated description they should use"
+        ])
+        
+        system_prompt = "\n".join(system_parts)
+        
+        # Build conversation for Hermes
+        # We'll use the hermes_ai module's agent
+        try:
+            agent = hermes_ai.get_hermes_agent()
+            
+            # Combine system prompt with conversation
+            full_prompt = system_prompt + "\n\nConversation:\n"
+            for msg in messages:
+                role = "User" if msg.get("role") == "user" else "Assistant"
+                full_prompt += f"{role}: {msg.get('content', '')}\n"
+            full_prompt += "\nAssistant:"
+            
+            result = agent.run_conversation(full_prompt)
+            
+            # Check if the agent call failed
+            if result.get("failed", False):
+                raise RuntimeError(f"Agent failed: {result.get('error', 'Unknown error')}")
+            
+            response = result.get("final_response", "I couldn't generate a response.")
+            
+            # Try to extract structured updates from response
+            # Look for JSON blocks or specific patterns
+            import re
+            spec_update = None
+            script_update = None
+            desc_update = None
+            
+            # Check if response contains updated description pattern
+            desc_match = re.search(r'UPDATED DESCRIPTION:\s*(.+?)(?:\n\n|\n$|$)', response, re.IGNORECASE | re.DOTALL)
+            if desc_match:
+                desc_update = desc_match.group(1).strip()
+            
+            self._json({
+                "response": response,
+                "spec": spec_update,
+                "script": script_update,
+                "description": desc_update
+            })
+            
+        except Exception as e:
+            # Fallback response
+            self._json({
+                "response": f"I'm having trouble connecting to the AI service: {e}. You can still use the Enhance and Suggest buttons for rule-based help.",
+                "spec": None,
+                "script": None,
+                "description": None
+            })
+
+    def _get_recommendations(self, doc: Dict[str, Any]) -> None:
+        """Get comprehensive map generation recommendations."""
+        description = doc.get("description", "").strip()
+        if not description:
+            self._json({"error": "description is required"}, 400)
+            return
+        
+        web_enabled = doc.get("web_enabled", self.web_enabled)
+        
+        try:
+            result = hermes_ai.get_web_recommendations(description, web_enabled)
+            self._json(result)
+        except Exception as e:
+            self._json({
+                "error": f"Failed to get recommendations: {e}",
+                "fallback": True
+            }, 500)
+
+    def _optimize_instructions(self, doc: Dict[str, Any]) -> None:
+        """Optimize and generate map2arcpy instructions from description."""
+        description = doc.get("description", "").strip()
+        if not description:
+            self._json({"error": "description is required"}, 400)
+            return
+        
+        web_enabled = doc.get("web_enabled", self.web_enabled)
+        
+        try:
+            optimized = hermes_ai.optimize_instructions(description, web_enabled)
+            self._json({
+                "original": description,
+                "optimized": optimized,
+                "ready_to_generate": True
+            })
+        except Exception as e:
+            self._json({
+                "error": f"Failed to optimize instructions: {e}",
+                "original": description,
+                "optimized": description
+            }, 500)
+
+    def _search_web_sources(self, doc: Dict[str, Any]) -> None:
+        """Search for optimal web data sources (OSM, AGOL)."""
+        description = doc.get("description", "").strip()
+        if not description:
+            self._json({"error": "description is required"}, 400)
+            return
+        
+        try:
+            result = hermes_ai.search_web_sources(description)
+            self._json(result)
+        except Exception as e:
+            self._json({
+                "error": f"Failed to search web sources: {e}",
+                "recommended_sources": [],
+                "location": None
+            }, 500)
+
+    def _analyze_map_type(self, doc: Dict[str, Any]) -> None:
+        """Analyze map type and provide detailed recommendations."""
+        description = doc.get("description", "").strip()
+        if not description:
+            self._json({"error": "description is required"}, 400)
+            return
+        
+        try:
+            result = hermes_ai.detect_map_type_detailed(description)
+            self._json(result)
+        except Exception as e:
+            self._json({
+                "error": f"Failed to analyze map type: {e}",
+                "detected_types": []
+            }, 500)
+
     # -------------------------------------------------------------- handlers
     def do_GET(self):                                         # noqa: N802
         if self.path in ("/", "/index.html"):
@@ -229,7 +441,10 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):                                        # noqa: N802
         if self.path not in ("/api/inspect", "/api/generate", "/api/dynamics",
-                             "/api/discover", "/api/plan", "/api/doctor"):
+                             "/api/discover", "/api/plan", "/api/doctor",
+                             "/api/enhance", "/api/suggest-improvements", "/api/chat",
+                             "/api/recommendations", "/api/optimize-instructions",
+                             "/api/web-sources", "/api/map-type-analysis"):
             self._json({"error": "not found"}, 404)
             return
         # CSRF guard: browsers cannot send application/json cross-origin
@@ -249,6 +464,27 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/api/doctor":
             from .doctor import diagnose
             self._json(diagnose(str(doc.get("log") or "")))
+            return
+        if self.path == "/api/enhance":
+            self._enhance_description(doc)
+            return
+        if self.path == "/api/suggest-improvements":
+            self._suggest_improvements(doc)
+            return
+        if self.path == "/api/chat":
+            self._chat(doc)
+            return
+        if self.path == "/api/recommendations":
+            self._get_recommendations(doc)
+            return
+        if self.path == "/api/optimize-instructions":
+            self._optimize_instructions(doc)
+            return
+        if self.path == "/api/web-sources":
+            self._search_web_sources(doc)
+            return
+        if self.path == "/api/map-type-analysis":
+            self._analyze_map_type(doc)
             return
         spec = self._parse(doc)
         if spec is None:

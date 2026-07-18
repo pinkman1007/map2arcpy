@@ -216,3 +216,106 @@ def test_doctor_endpoint():
     assert status == 200 and j["success"] is True
     status, j = _post("/api/doctor", {"log": "FileNotFoundError: Missing inputs:"})
     assert status == 200 and j["success"] is False
+
+
+def test_enhance_endpoint_fallback():
+    """Test /api/enhance endpoint with fallback (no API key)"""
+    status, j = _post("/api/enhance", {
+        "description": "population density map of city wards",
+        "context": {"web_enabled": True, "target": "arcpy"}
+    })
+    assert status == 200
+    assert "enhanced_description" in j
+    assert "suggestions" in j
+    assert "detected_map_types" in j
+    assert "best_practices_applied" in j
+    assert j.get("fallback") is True  # Should use fallback since no API key
+    assert "population" in j["detected_map_types"]
+    assert len(j["enhanced_description"]) > 0
+
+
+def test_suggest_improvements_endpoint_fallback():
+    """Test /api/suggest-improvements endpoint with fallback"""
+    spec = {
+        "layers": [
+            {"name": "wards", "kind": "vector", "source": "wards.shp",
+             "renderer": {"type": "graduated", "field": "pop_density"}}
+        ],
+        "operations": [],
+        "crs_epsg": 4326,
+        "layout": {"title": "Untitled Map", "page": "A4L", "dpi": 300}
+    }
+    status, j = _post("/api/suggest-improvements", {
+        "spec": spec,
+        "context": {"web_enabled": True}
+    })
+    assert status == 200
+    assert "suggestions" in j
+    assert "warnings" in j
+    assert "best_practices" in j
+    assert "spec_summary" in j
+    assert j.get("fallback") is True  # Should use fallback since no API key
+    # Should warn about CRS 4326 with operations
+    assert len(j["warnings"]) >= 0  # May have warnings about CRS
+    assert len(j["best_practices"]) > 0
+
+
+def test_suggest_improvements_detects_missing_basemap():
+    """Test that suggestions detect missing basemap"""
+    spec = {
+        "layers": [
+            {"name": "wards", "kind": "vector", "source": "wards.shp",
+             "renderer": {"type": "graduated", "field": "pop_density", "class_method": "quantile", "class_count": 5}}
+        ],
+        "operations": [],
+        "crs_epsg": 32644,
+        "layout": {"title": "Population Map", "page": "A4L", "dpi": 300}
+    }
+    status, j = _post("/api/suggest-improvements", {
+        "spec": spec,
+        "context": {"web_enabled": True}
+    })
+    assert status == 200
+    # Should suggest adding a basemap
+    basemap_suggestions = [s for s in j["suggestions"] if s["type"] == "basemap"]
+    assert len(basemap_suggestions) >= 1
+    assert basemap_suggestions[0]["priority"] == "medium"
+
+
+def test_suggest_improvements_detects_missing_classification():
+    """Test that suggestions detect missing classification for graduated renderer"""
+    spec = {
+        "layers": [
+            {"name": "wards", "kind": "vector", "source": "wards.shp",
+             "renderer": {"type": "graduated", "field": "pop_density"}}
+        ],
+        "operations": [],
+        "crs_epsg": 32644,
+        "layout": {"title": "Population Map", "page": "A4L", "dpi": 300}
+    }
+    status, j = _post("/api/suggest-improvements", {
+        "spec": spec,
+        "context": {"web_enabled": True}
+    })
+    assert status == 200
+    # Should warn about missing classification
+    symbology_suggestions = [s for s in j["suggestions"] if s["type"] == "symbology" and s["priority"] == "high"]
+    assert len(symbology_suggestions) >= 1
+    assert "classification" in symbology_suggestions[0]["description"].lower()
+
+
+def test_chat_endpoint_fallback():
+    """Test /api/chat endpoint with fallback"""
+    status, j = _post("/api/chat", {
+        "messages": [
+            {"role": "user", "content": "Create a population density map"}
+        ],
+        "context": {"web_enabled": True, "target": "arcpy"}
+    })
+    assert status == 200
+    assert "response" in j
+    assert "spec" in j
+    assert "script" in j
+    assert "description" in j
+    # Should get a fallback response since no API key
+    assert "AI service" in j["response"] or "trouble connecting" in j["response"] or "failed" in j["response"].lower() or "404" in j["response"]

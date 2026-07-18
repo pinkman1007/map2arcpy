@@ -62,9 +62,27 @@
                  text-transform:uppercase">evening the odds</span>
   </div>
   <span id="status">connecting…</span>
+  <button id="openChat" class="ghost" style="margin-left:12px;padding:6px 12px;font-size:13px">🤖 Chat</button>
 </header>
 
 <main>
+  <section id="chat-section" style="display:none">
+    <div class="card" style="height:calc(100vh - 100px);display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h2>🤖 Hermes Chat</h2>
+        <button id="closeChat" class="ghost" style="padding:4px 10px;font-size:12px">✕ Close</button>
+      </div>
+      <div id="chatMessages" style="flex:1;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;max-height:60vh">
+        <div style="color:var(--dim);font-size:13px;padding:8px">Welcome! Describe a map or ask me to refine the current one.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="chatInput" placeholder="e.g. \"make the ramp viridis\", \"add a roads layer\", \"change to A4 portrait\"" style="flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:14px/1.5 var(--mono)">
+        <button id="chatSend" style="background:var(--teal);color:#08181d;border:0;border-radius:8px;padding:10px 16px;font-weight:600;cursor:pointer">Send</button>
+      </div>
+      <div id="chatStatus" style="font-size:12px;color:var(--dim);margin-top:6px;height:16px"></div>
+    </div>
+  </section>
+
   <section>
     <div class="card">
       <h2>1 · Describe or upload a map</h2>
@@ -94,6 +112,7 @@
           </select></label>
       </div>
       <div class="row">
+        <button id="btnEnhance" class="ghost">✨ Enhance with AI</button>
         <button id="btnGen">Generate script</button>
         <button id="btnDiscover" class="ghost">What can I map?</button>
         <button id="btnInspect" class="ghost">Inspect spec</button>
@@ -102,6 +121,11 @@
       <div id="compose" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px"></div>
       <div id="msg"></div>
       <div id="discover"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px" id="aiSuggestionsCard" hidden>
+      <h2>🤖 AI Suggestions & Best Practices</h2>
+      <div id="aiSuggestions" style="font-size:13px"></div>
     </div>
 
     <div class="card" style="margin-top:18px" id="plancard" hidden>
@@ -396,11 +420,13 @@ async function call(path, btn){
       lastScript = j.script; lastName = j.filename || "map_script.py";
       $("script").textContent = j.script;
       $("btnCopy").disabled = $("btnDl").disabled = false;
-      $("meta").textContent = `${j.script.split("\n").length} lines · ${j.todos} TODOs · ${lastName}`;
+      $("meta").textContent = `${j.script.split("\\n").length} lines · ${j.todos} TODOs · ${lastName}`;
     }else{
       $("meta").textContent = `spec: ${(j.spec.layers||[]).length} layers · ${(j.spec.operations||[]).length} ops · EPSG:${j.spec.crs_epsg}`;
       document.querySelector('[data-tab="spec"]').click();
     }
+    // Fetch AI suggestions for the spec
+    callSuggestImprovements(j.spec);
   }catch(e){ $("msg").textContent = "request failed: " + e; }
   finally{ btn.disabled = false; btn.textContent = btn === $("btnGen") ? "Generate script" : "Inspect spec"; }
 }
@@ -614,6 +640,219 @@ $("doctor_go").onclick = async () => {
 $("btnGen").onclick = () => call("/api/generate", $("btnGen"));
 $("btnInspect").onclick = () => call("/api/inspect", $("btnInspect"));
 $("btnClear").onclick = () => { $("input").value = ""; $("localpath").value = ""; clearFile(); $("msg").textContent = ""; };
+
+// ---- AI Enhancement ----------------------------------------------------------
+$("btnEnhance").onclick = async () => {
+  const desc = $("input").value.trim();
+  if(!desc){ $("msg").textContent = "type a map description first"; return; }
+  $("btnEnhance").disabled = true; $("btnEnhance").textContent = "enhancing…";
+  try{
+    const p = payload();
+    const body = {
+      description: desc,
+      context: {
+        web_enabled: p.web,
+        target: p.target
+      }
+    };
+    const r = await fetch("/api/enhance", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if(!r.ok){ $("msg").textContent = j.error || "enhance failed"; return; }
+    // Show enhanced description in input
+    if(j.enhanced_description){
+      $("input").value = j.enhanced_description;
+      $("msg").textContent = "✨ Enhanced! Review and click Generate script";
+    }
+    // Show AI suggestions
+    showAISuggestions(j);
+  }catch(e){ $("msg").textContent = "request failed: " + e; }
+  finally{ $("btnEnhance").disabled = false; $("btnEnhance").textContent = "✨ Enhance with AI"; }
+};
+
+function showAISuggestions(j){
+  const card = $("aiSuggestionsCard");
+  const box = $("aiSuggestions");
+  card.hidden = false;
+  let html = "";
+  if(j.suggestions && j.suggestions.length){
+    html += '<div style="margin-bottom:10px"><b style="color:var(--teal-bright)">Suggestions:</b></div>';
+    j.suggestions.forEach(s => {
+      html += `<div style="margin:6px 0;padding:8px;background:var(--panel2);border:1px solid var(--line);border-radius:6px">${esc(s)}</div>`;
+    });
+  }
+  if(j.best_practices_applied && j.best_practices_applied.length){
+    html += '<div style="margin-top:10px;margin-bottom:6px"><b style="color:var(--teal-bright)">Best Practices Applied:</b></div>';
+    j.best_practices_applied.forEach(bp => {
+      html += `<div style="margin:4px 0;padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;font-size:12px">${esc(bp)}</div>`;
+    });
+  }
+  if(j.detected_map_types && j.detected_map_types.length){
+    html += '<div style="margin-top:10px;margin-bottom:6px"><b style="color:var(--teal-bright)">Detected Map Types:</b></div>';
+    j.detected_map_types.forEach(t => {
+      html += `<span class="pill">${esc(t)}</span> `;
+    });
+  }
+  if(j.web_enrichment_available){
+    html += '<div style="margin-top:10px;padding:8px;background:#1a3a2a;border:1px solid var(--ok);border-radius:6px"><b style="color:var(--ok)">🌐 Web Enrichment Available</b> — Start server with <code>--web</code> to enable OSM/geocoding/AGOL features</div>';
+  }
+  box.innerHTML = html || '<span style="color:var(--dim)">No AI suggestions available</span>';
+}
+
+// Also show suggestions after generating/inspecting
+async function callSuggestImprovements(spec) {
+  try{
+    const p = payload();
+    const body = { spec: { spec: spec, context: { web_enabled: p.web } } };
+    const r = await fetch("/api/suggest-improvements", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if(r.ok){
+      showAISuggestionsFromAnalysis(j);
+    }
+  }catch(e){ /* silent fail for suggestions */ }
+}
+
+function showAISuggestionsFromAnalysis(j){
+  const card = $("aiSuggestionsCard");
+  const box = $("aiSuggestions");
+  card.hidden = false;
+  let html = "";
+  if(j.suggestions && j.suggestions.length){
+    html += '<div style="margin-bottom:10px"><b style="color:var(--teal-bright)">🎯 Map Improvements:</b></div>';
+    j.suggestions.forEach(s => {
+      const priorityColor = s.priority === "high" ? "var(--err)" : s.priority === "medium" ? "var(--warn)" : "var(--dim)";
+      html += `<div style="margin:6px 0;padding:10px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;border-left:4px solid ${priorityColor}">
+        <div style="font-weight:600;color:${priorityColor}">${esc(s.type.toUpperCase())} (${s.priority})</div>
+        <div>${esc(s.description)}</div>
+        ${s.code_hint ? `<div style="margin-top:4px;font:11.5px var(--mono);color:var(--teal-bright)">${esc(s.code_hint)}</div>` : ""}
+        ${s.impact ? `<div style="margin-top:4px;font-size:11.5px;color:var(--dim)">${esc(s.impact)}</div>` : ""}
+      </div>`;
+    });
+  }
+  if(j.warnings && j.warnings.length){
+    html += '<div style="margin-top:10px;margin-bottom:6px"><b style="color:var(--err)">⚠ Warnings:</b></div>';
+    j.warnings.forEach(w => {
+      html += `<div style="margin:4px 0;padding:8px;background:#3a1a1a;border:1px solid var(--err);border-radius:6px">
+        <div style="color:var(--err);font-weight:600">${esc(w.type.toUpperCase())} (${w.severity})</div>
+        <div>${esc(w.description)}</div>
+        ${w.fix ? `<div style="margin-top:4px;color:var(--teal-bright);font-size:12px">Fix: ${esc(w.fix)}</div>` : ""}
+      </div>`;
+    });
+  }
+  if(j.best_practices && j.best_practices.length){
+    html += '<div style="margin-top:10px;margin-bottom:6px"><b style="color:var(--teal-bright)">✅ Best Practices:</b></div>';
+    j.best_practices.forEach(bp => {
+      html += `<div style="margin:4px 0;padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;font-size:12px">${esc(bp)}</div>`;
+    });
+  }
+  box.innerHTML = html || '<span style="color:var(--dim)">No AI suggestions — looks good!</span>';
+}
+
+// Chat panel functionality
+let chatHistory = [];
+let chatContext = { spec: null, script: null, description: "" };
+
+function openChat() {
+  $("chat-section").style.display = "block";
+  $("chatInput").focus();
+}
+
+function closeChat() {
+  $("chat-section").style.display = "none";
+}
+
+$("openChat").onclick = openChat;
+$("closeChat").onclick = closeChat;
+
+function addChatMessage(role, content) {
+  const box = $("chatMessages");
+  const div = document.createElement("div");
+  div.style.marginBottom = "10px";
+  div.style.padding = "8px 10px";
+  div.style.borderRadius = "8px";
+  div.style.maxWidth = "85%";
+  if (role === "user") {
+    div.style.background = "var(--teal)";
+    div.style.color = "#08181d";
+    div.style.marginLeft = "auto";
+    div.style.borderBottomRightRadius = "2px";
+  } else {
+    div.style.background = "var(--panel)";
+    div.style.color = "var(--text)";
+    div.style.border = "1px solid var(--line)";
+    div.style.marginRight = "auto";
+    div.style.borderBottomLeftRadius = "2px";
+  }
+  div.textContent = content;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = $("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  
+  addChatMessage("user", text);
+  chatHistory.push({ role: "user", content: text });
+  input.value = "";
+  $("chatStatus").textContent = "Hermes is thinking...";
+  $("chatSend").disabled = true;
+  
+  try {
+    const p = payload();
+    const body = {
+      messages: chatHistory,
+      context: {
+        spec: chatContext.spec,
+        script: chatContext.script,
+        description: chatContext.description,
+        web_enabled: p.web,
+        target: p.target
+      }
+    };
+    
+    const r = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    
+    if (!r.ok) throw new Error(j.error || "Chat failed");
+    
+    addChatMessage("assistant", j.response);
+    chatHistory.push({ role: "assistant", content: j.response });
+    
+    // If Hermes returned an updated spec/script, apply it
+    if (j.spec) {
+      chatContext.spec = j.spec;
+      // Optionally update the UI
+    }
+    if (j.script) {
+      chatContext.script = j.script;
+      lastScript = j.script;
+      $("script").textContent = j.script;
+      $("btnCopy").disabled = $("btnDl").disabled = false;
+    }
+    if (j.description) {
+      chatContext.description = j.description;
+      $("input").value = j.description;
+    }
+    
+    $("chatStatus").textContent = "";
+  } catch (e) {
+    addChatMessage("assistant", "Error: " + e.message);
+    $("chatStatus").textContent = "Error - try again";
+  } finally {
+    $("chatSend").disabled = false;
+  }
+}
+
+$("chatSend").onclick = sendChatMessage;
+$("chatInput").onkeydown = (e) => { if (e.key === "Enter") sendChatMessage(); };
+
 $("btnCopy").onclick = async () => { await navigator.clipboard.writeText(lastScript); $("msg").textContent = "copied ✓"; };
 $("btnDl").onclick = () => {
   const a = document.createElement("a");
