@@ -128,6 +128,35 @@
       <div id="aiSuggestions" style="font-size:13px"></div>
     </div>
 
+    <div class="card" style="margin-top:18px" id="recommendationsCard" hidden>
+      <h2>💡 Intelligent Recommendations</h2>
+      <div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">
+        Automatically detect map type, suggest optimal data sources, geoprocessing operations, and best practices.
+      </div>
+      <div class="row">
+        <button id="btnGetRecommendations" class="ghost">Get Recommendations</button>
+        <button id="btnDiscoverDataSources" class="ghost">Discover Web Data</button>
+      </div>
+      <div id="recommendationsOutput" style="margin-top:10px;font-size:13px"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px" id="webScrapingCard" hidden>
+      <h2>🌐 Web Data Scraping</h2>
+      <div style="font-size:12.5px;color:var(--dim);margin-bottom:8px">
+        Automatically fetch geographic data from OSM, AGOL, and other public sources. Data is deduplicated and formatted.
+      </div>
+      <label>Search query (e.g. "hospitals in India")
+        <input type="text" id="scrapeQuery" class="stin" placeholder="hospitals in India" style="margin-top:4px">
+      </label>
+      <div class="row" style="margin-top:8px">
+        <button id="btnFetchWebData">Fetch Data</button>
+        <label class="chk">
+          <input type="checkbox" id="autoLoadScraped"> auto-load into map
+        </label>
+      </div>
+      <div id="scrapingOutput" style="margin-top:10px;font-size:13px"></div>
+    </div>
+
     <div class="card" style="margin-top:18px" id="plancard" hidden>
       <h2>Plan — what I understood <span class="pill" id="planstate"></span></h2>
       <div id="planchecks" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
@@ -852,6 +881,121 @@ async function sendChatMessage() {
 
 $("chatSend").onclick = sendChatMessage;
 $("chatInput").onkeydown = (e) => { if (e.key === "Enter") sendChatMessage(); };
+
+// ---- recommendations and web scraping buttons --------------------------------
+$("btnGetRecommendations").onclick = async () => {
+  const txt = $("input").value.trim();
+  if (!txt) { $("msg").textContent = "describe a map first"; return; }
+  $("btnGetRecommendations").disabled = true;
+  $("btnGetRecommendations").textContent = "…";
+  try {
+    const r = await fetch("/api/recommendations", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ description: txt })
+    });
+    const j = await r.json();
+    if (!r.ok) { $("msg").textContent = j.error || "Error"; return; }
+    
+    let html = "<div style='border-left:3px solid var(--teal);padding-left:12px'>";
+    if (j.detected_types && j.detected_types.length) {
+      html += "<div style='margin-bottom:10px'><b style='color:var(--teal-bright)'>Map Types Detected:</b><br>";
+      j.detected_types.forEach(t => html += `<span class='pill'>${esc(t)}</span> `);
+      html += "</div>";
+    }
+    if (j.recommended_data_sources && j.recommended_data_sources.length) {
+      html += "<div style='margin-bottom:10px'><b style='color:var(--teal-bright)'>Recommended Data Sources:</b><br>";
+      j.recommended_data_sources.slice(0, 5).forEach(s => 
+        html += `<div style='margin:4px 0;padding:6px;background:var(--panel2);border-radius:4px;font-size:12px'>${esc(s.name)} (${esc(s.type)}) <span style='color:var(--dim)'>• ${s.region}</span></div>`
+      );
+      html += "</div>";
+    }
+    if (j.recommended_operations && j.recommended_operations.length) {
+      html += "<div style='margin-bottom:10px'><b style='color:var(--teal-bright)'>Recommended Operations:</b><br>";
+      j.recommended_operations.forEach(op => html += `<div style='margin:2px 0;font-size:12px'>• ${esc(op)}</div>`);
+      html += "</div>";
+    }
+    if (j.cartography_best_practices && j.cartography_best_practices.length) {
+      html += "<div><b style='color:var(--teal-bright)'>Cartography Tips:</b><br>";
+      j.cartography_best_practices.forEach(tip => html += `<div style='margin:2px 0;font-size:12px'>• ${esc(tip)}</div>`);
+      html += "</div>";
+    }
+    html += "</div>";
+    $("recommendationsOutput").innerHTML = html;
+    $("recommendationsCard").hidden = false;
+  } catch (e) { $("msg").textContent = "error: " + e.message; }
+  finally { $("btnGetRecommendations").disabled = false; $("btnGetRecommendations").textContent = "Get Recommendations"; }
+};
+
+$("btnDiscoverDataSources").onclick = async () => {
+  const txt = $("input").value.trim();
+  if (!txt) { $("msg").textContent = "describe a map first"; return; }
+  $("btnDiscoverDataSources").disabled = true;
+  $("btnDiscoverDataSources").textContent = "…";
+  try {
+    const r = await fetch("/api/discover-data-sources", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ query: txt })
+    });
+    const j = await r.json();
+    if (!r.ok) { $("msg").textContent = j.error || "Error"; return; }
+    
+    let html = "<div style='border-left:3px solid var(--teal);padding-left:12px'>";
+    if (j.sources && j.sources.length) {
+      html += "<b style='color:var(--teal-bright)'>Available Data Sources:</b>";
+      j.sources.slice(0, 8).forEach(s => {
+        html += `<div style='margin:8px 0;padding:8px;background:var(--panel2);border-radius:6px;font-size:12px'>
+          <div style='font-weight:600;color:var(--text)'>${esc(s.name)}</div>
+          <div style='color:var(--dim);margin-top:2px'>${esc(s.description || s.type)}</div>
+          <div style='color:var(--teal-bright);margin-top:4px;font-size:11px'>Region: ${esc(s.region)} | Type: ${esc(s.type)}</div>
+        </div>`;
+      });
+    }
+    html += "</div>";
+    $("recommendationsOutput").innerHTML = html;
+    $("recommendationsCard").hidden = false;
+  } catch (e) { $("msg").textContent = "error: " + e.message; }
+  finally { $("btnDiscoverDataSources").disabled = false; $("btnDiscoverDataSources").textContent = "Discover Web Data"; }
+};
+
+$("btnFetchWebData").onclick = async () => {
+  const query = $("scrapeQuery").value.trim();
+  if (!query) { $("msg").textContent = "enter a search query"; return; }
+  $("btnFetchWebData").disabled = true;
+  $("btnFetchWebData").textContent = "…";
+  try {
+    const r = await fetch("/api/fetch-geo-data", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ query: query })
+    });
+    const j = await r.json();
+    if (!r.ok) { $("msg").textContent = j.error || "Error"; return; }
+    
+    let html = "<div style='border-left:3px solid var(--ok);padding-left:12px'>";
+    html += `<div style='color:var(--text);margin-bottom:8px'><b>${esc(j.count || 0)} features fetched</b></div>`;
+    if (j.features && j.features.length > 0) {
+      html += "<div style='color:var(--teal-bright);font-weight:600;margin-bottom:6px'>Sample Records:</div>";
+      j.features.slice(0, 3).forEach(f => {
+        const props = f.properties || {};
+        html += `<div style='margin:6px 0;padding:8px;background:var(--panel2);border-radius:4px;font-size:12px'>`;
+        for (const [k, v] of Object.entries(props).slice(0, 3)) {
+          html += `<div><span style='color:var(--dim)'>${esc(k)}:</span> ${esc(String(v).slice(0, 40))}</div>`;
+        }
+        html += "</div>";
+      });
+    }
+    if ($("autoLoadScraped").checked && j.geojson_data) {
+      $("input").value = (query + " from web [" + (j.count || 0) + " features]");
+      $("msg").textContent = "data loaded — Generate script to map it";
+    }
+    html += "</div>";
+    $("scrapingOutput").innerHTML = html;
+    $("webScrapingCard").hidden = false;
+  } catch (e) { $("msg").textContent = "error: " + e.message; }
+  finally { $("btnFetchWebData").disabled = false; $("btnFetchWebData").textContent = "Fetch Data"; }
+};
 
 $("btnCopy").onclick = async () => { await navigator.clipboard.writeText(lastScript); $("msg").textContent = "copied ✓"; };
 $("btnDl").onclick = () => {
