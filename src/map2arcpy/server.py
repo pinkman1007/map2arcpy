@@ -416,6 +416,128 @@ class _Handler(BaseHTTPRequestHandler):
                 "detected_types": []
             }, 500)
 
+    def _scrape_data(self, doc: Dict[str, Any]) -> None:
+        """Scrape geographic data from a web source."""
+        url = doc.get("url", "").strip()
+        data_type = doc.get("data_type", "csv").lower()
+        format_spec = doc.get("format_spec", {})
+        
+        if not url:
+            self._json({"error": "url is required"}, 400)
+            return
+        
+        try:
+            from .scrapy_fetcher import ScrapyDataCollector
+            
+            collector = ScrapyDataCollector()
+            geojson = collector.fetch_and_convert(url, data_type, format_spec)
+            
+            if geojson:
+                self._json({
+                    "success": True,
+                    "geojson": geojson,
+                    "record_count": len(geojson.get("features", [])),
+                    "source": {
+                        "url": url,
+                        "data_type": data_type,
+                        "format_spec": format_spec,
+                    }
+                })
+            else:
+                self._json({
+                    "success": False,
+                    "error": f"Failed to fetch from {url}",
+                    "data_type": data_type
+                }, 400)
+        except Exception as e:
+            self._json({
+                "error": f"Scraping failed: {e}",
+                "url": url,
+                "data_type": data_type
+            }, 500)
+
+    def _discover_data_sources(self, doc: Dict[str, Any]) -> None:
+        """Discover web data sources for a map description."""
+        description = doc.get("description", "").strip()
+        
+        if not description:
+            self._json({"error": "description is required"}, 400)
+            return
+        
+        try:
+            from .web_scraper import discover_web_data_sources
+            
+            result = discover_web_data_sources(description)
+            self._json(result)
+        except Exception as e:
+            self._json({
+                "error": f"Discovery failed: {e}",
+                "description": description
+            }, 500)
+
+    def _fetch_geographic_data(self, doc: Dict[str, Any]) -> None:
+        """Fetch and process geographic data from discovered sources."""
+        description = doc.get("description", "").strip()
+        limit = doc.get("limit", 1)  # Number of sources to fetch
+        
+        if not description:
+            self._json({"error": "description is required"}, 400)
+            return
+        
+        try:
+            from .web_scraper import discover_web_data_sources
+            from .scrapy_fetcher import ScrapyDataCollector
+            
+            # Discover sources
+            discovery = discover_web_data_sources(description)
+            sources = discovery.get("discovered_sources", [])[:limit]
+            
+            if not sources:
+                self._json({
+                    "success": False,
+                    "message": "No data sources found for description",
+                    "description": description
+                }, 404)
+                return
+            
+            # Fetch from each source
+            collector = ScrapyDataCollector()
+            all_features = []
+            
+            for source_result in sources:
+                source = source_result.get("source", {})
+                url = source.get("url")
+                data_type = source.get("data_type")
+                format_spec = source.get("format_spec", {})
+                
+                geojson = collector.fetch_and_convert(url, data_type, format_spec)
+                if geojson:
+                    features = geojson.get("features", [])
+                    all_features.extend(features)
+            
+            # Return merged GeoJSON
+            merged_geojson = {
+                "type": "FeatureCollection",
+                "features": all_features,
+                "metadata": {
+                    "record_count": len(all_features),
+                    "sources_fetched": len(sources),
+                    "description": description,
+                }
+            }
+            
+            self._json({
+                "success": True,
+                "geojson": merged_geojson,
+                "sources_used": [s.get("source", {}).get("name") for s in sources],
+                "ready_for_map": True
+            })
+        except Exception as e:
+            self._json({
+                "error": f"Data fetch failed: {e}",
+                "description": description
+            }, 500)
+
     # -------------------------------------------------------------- handlers
     def do_GET(self):                                         # noqa: N802
         if self.path in ("/", "/index.html"):
@@ -444,7 +566,8 @@ class _Handler(BaseHTTPRequestHandler):
                              "/api/discover", "/api/plan", "/api/doctor",
                              "/api/enhance", "/api/suggest-improvements", "/api/chat",
                              "/api/recommendations", "/api/optimize-instructions",
-                             "/api/web-sources", "/api/map-type-analysis"):
+                             "/api/web-sources", "/api/map-type-analysis",
+                             "/api/scrape", "/api/discover-data-sources", "/api/fetch-geo-data"):
             self._json({"error": "not found"}, 404)
             return
         # CSRF guard: browsers cannot send application/json cross-origin
@@ -485,6 +608,15 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/map-type-analysis":
             self._analyze_map_type(doc)
+            return
+        if self.path == "/api/scrape":
+            self._scrape_data(doc)
+            return
+        if self.path == "/api/discover-data-sources":
+            self._discover_data_sources(doc)
+            return
+        if self.path == "/api/fetch-geo-data":
+            self._fetch_geographic_data(doc)
             return
         spec = self._parse(doc)
         if spec is None:
